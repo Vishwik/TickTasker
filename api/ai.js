@@ -1,5 +1,4 @@
 import admin from 'firebase-admin';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Set Vercel max duration for this serverless function (in seconds)
 export const maxDuration = 60;
@@ -81,17 +80,46 @@ async function callGemini(messages, jsonMode = false) {
     const apiKey = getNormalizedEnvValue('GEMINI_API_KEY');
     if (!apiKey) throw new Error('GEMINI_API_KEY is not set in environment variables.');
 
-    const ai = new GoogleGenerativeAI(apiKey);
-    const model = ai.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        generationConfig: {
-            temperature: jsonMode ? 0.1 : 0.7,
-            ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
-        },
-    });
+    const prompt = buildPromptFromMessages(messages, jsonMode);
+    const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                generationConfig: {
+                    temperature: jsonMode ? 0.1 : 0.7,
+                    ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+                },
+                contents: [
+                    {
+                        role: 'user',
+                        parts: [
+                            {
+                                text: prompt,
+                            }
+                        ]
+                    }
+                ]
+            }),
+        }
+    );
 
-    const result = await model.generateContent(buildPromptFromMessages(messages, jsonMode));
-    return result.response.text();
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Gemini API error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('').trim();
+
+    if (!text) {
+        throw new Error('Gemini API returned an empty response.');
+    }
+
+    return text;
 }
 
 async function callAI(messages, jsonMode = false) {
@@ -228,8 +256,10 @@ Today is ${dateString}, current time is ${timeString}.`
     } catch (error) {
         console.error("AI API Error:", error);
         let errorMessage = error.message || 'An unexpected error occurred.';
-        if (errorMessage.includes('401') || errorMessage.includes('invalid_api_key') || errorMessage.includes('API key not valid')) {
+        if (errorMessage.includes('401') || errorMessage.includes('403') || errorMessage.includes('invalid_api_key') || errorMessage.includes('API key not valid')) {
             errorMessage = 'The AI API key is invalid. Please update GEMINI_API_KEY or GROK_API_KEY in Vercel environment variables.';
+        } else if (errorMessage.includes('Gemini API error')) {
+            errorMessage = error.message || 'Gemini returned an error.';
         } else if (errorMessage.includes('429')) {
             errorMessage = 'Rate limit reached. Please wait a moment and try again.';
         } else if (errorMessage.includes('fetch') || errorMessage.includes('ECONNREFUSED')) {
