@@ -1,18 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { generateSubtasks } from '../utils/AIEngine';
-import { Sparkles, Check, X, Plus, Trash2 } from 'lucide-react';
+import { AIClient } from '../utils/aiClient';
+import { Sparkles, Check, X, Plus, Trash2, RefreshCw } from 'lucide-react';
 import { useTasks } from '../context/TaskContext';
+import { useProfile } from '../context/ProfileContext';
 
 export default function BreakdownModal({ task, isOpen, onClose }) {
     const { addSubtasks } = useTasks();
+    const { profile } = useProfile();
     const [steps, setSteps] = useState([]);
     const [customStep, setCustomStep] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         if (isOpen && task) {
-            const generated = generateSubtasks(task.title, task.duration, task.category);
-            setSteps(generated);
+            const fetchSteps = async () => {
+                setIsGenerating(true);
+                setError('');
+                try {
+                    const generated = await AIClient.breakDownTask(task.title, { name: profile?.name, role: profile?.role });
+                    setSteps(generated);
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+            fetchSteps();
         }
     }, [isOpen, task]);
 
@@ -53,8 +68,17 @@ export default function BreakdownModal({ task, isOpen, onClose }) {
                         </div>
 
                         <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                            {steps.length === 0 ? (
-                                <p className="text-[var(--text-primary)] opacity-50 text-center italic">Generating steps...</p>
+                            {isGenerating ? (
+                                <div className="py-8 flex flex-col items-center justify-center text-[rgb(var(--color-accent))]">
+                                    <RefreshCw className="animate-spin mb-4" size={32} />
+                                    <p className="opacity-80 text-sm font-medium">AI is breaking this down...</p>
+                                </div>
+                            ) : error ? (
+                                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm text-center">
+                                    {error}
+                                </div>
+                            ) : steps.length === 0 ? (
+                                <p className="text-[var(--text-primary)] opacity-50 text-center italic">No steps generated.</p>
                             ) : (
                                 <div className="space-y-3">
                                     {steps.map((step, idx) => (

@@ -32,6 +32,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }) => {
 };
 
 import { useTasks } from '../context/TaskContext';
+import { useProfile } from '../context/ProfileContext';
 import PWAInstallPrompt from '../components/PWAInstallPrompt';
 import CommandPalette from '../components/CommandPalette'; // Import Palette
 import AddTaskModal from '../components/AddTaskModal'; // Import Global Modal
@@ -43,7 +44,13 @@ export default function Layout({ children, activeTab, setActiveTab }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isMobile, setIsMobile] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
-    const { setIsAddTaskModalOpen, notifications, markAllAsRead, setIsCommandPaletteOpen, isSettingsModalOpen, setIsSettingsModalOpen, isPrivacyModalOpen, setIsPrivacyModalOpen, breakdownTask, setBreakdownTask } = useTasks();
+    const { setIsAddTaskModalOpen, notifications, markAllAsRead, setIsCommandPaletteOpen, isSettingsModalOpen, setIsSettingsModalOpen, setSettingsActiveTab, isPrivacyModalOpen, setIsPrivacyModalOpen, breakdownTask, setBreakdownTask } = useTasks();
+    const { profile } = useProfile();
+    const [avatarError, setAvatarError] = useState(false);
+
+    React.useEffect(() => {
+        setAvatarError(false);
+    }, [profile?.avatar]);
 
     // Responsive Sidebar Handling
     React.useEffect(() => {
@@ -184,12 +191,16 @@ export default function Layout({ children, activeTab, setActiveTab }) {
                             {/* User Profile */}
                             <div className="p-4 border-t border-[var(--border-base)]">
                                 <div className="flex items-center space-x-3">
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold ring-2 ring-white/10 text-white">
-                                        Me
-                                    </div>
+                                    {profile?.avatar && !avatarError ? (
+                                        <img src={profile.avatar} alt="Profile" className="w-8 h-8 rounded-full border border-white/10 shrink-0" onError={() => setAvatarError(true)} />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold ring-2 ring-white/10 text-white shrink-0">
+                                            {profile ? profile.name.charAt(0).toUpperCase() : 'G'}
+                                        </div>
+                                    )}
                                     <div className="flex-1 overflow-hidden">
-                                        <p className="text-sm font-medium text-[var(--text-primary)] truncate">Student</p>
-                                        <p className="text-xs text-[var(--text-primary)] opacity-60 truncate">Productivity User</p>
+                                        <p className="text-sm font-medium text-[var(--text-primary)] truncate">{profile ? profile.name : 'Guest'}</p>
+                                        <p className="text-xs text-[var(--text-primary)] opacity-60 truncate">{profile ? profile.role : 'Productivity User'}</p>
                                     </div>
                                 </div>
                             </div>
@@ -254,17 +265,24 @@ export default function Layout({ children, activeTab, setActiveTab }) {
 
                 {/* User Profile Snippet */}
                 <div className="p-4 border-t border-[var(--border-base)]">
-                    <div className={`flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold ring-2 ring-white/10 text-white">
-                            Me
-                        </div>
-                        {isSidebarOpen && (
-                            <div className="flex-1 ml-3 overflow-hidden">
-                                <p className="text-sm font-medium text-[var(--text-primary)] truncate">Student</p>
-                                <p className="text-xs text-[var(--text-primary)] opacity-60 truncate">Productivity User</p>
+                    <button 
+                        onClick={() => { setSettingsActiveTab('profile'); setIsSettingsModalOpen(true); }}
+                        className={`w-full flex items-center p-2 rounded-xl hover:bg-[var(--text-primary)]/5 transition-colors ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}
+                    >
+                        {profile?.avatar && !avatarError ? (
+                            <img src={profile.avatar} alt="Profile" className="w-8 h-8 rounded-full border border-white/10 shrink-0" onError={() => setAvatarError(true)} />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold ring-2 ring-white/10 text-white shrink-0">
+                                {profile ? profile.name.charAt(0).toUpperCase() : 'G'}
                             </div>
                         )}
-                    </div>
+                        {isSidebarOpen && (
+                            <div className="flex-1 ml-3 overflow-hidden">
+                                <p className="text-sm font-medium text-[var(--text-primary)] truncate">{profile ? profile.name : 'Guest'}</p>
+                                <p className="text-xs text-[var(--text-primary)] opacity-60 truncate">{profile ? profile.role : 'Productivity User'}</p>
+                            </div>
+                        )}
+                    </button>
                 </div>
             </aside>
 

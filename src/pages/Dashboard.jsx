@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTasks } from '../context/TaskContext';
 import Card from '../components/Card';
 import FocusFlow from '../components/FocusFlow';
 import WeeklyProgress from '../components/WeeklyProgress';
-import { ArrowUpRight, CheckCircle2, AlertCircle, Clock, Zap, Settings } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, AlertCircle, Clock, Zap, Settings, Sparkles, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getRelativeDate } from '../utils/dateUtils';
+import { AIClient } from '../utils/aiClient';
+import { useProfile } from '../context/ProfileContext';
 
 const StatCard = ({ label, value, icon: Icon, color, delay }) => (
     <motion.div
@@ -27,6 +29,25 @@ const StatCard = ({ label, value, icon: Icon, color, delay }) => (
 
 export default function Dashboard() {
     const { tasks, sortedTasks, getCompletionRate, updateTaskStatus, setIsAddTaskModalOpen, preferences, setIsSettingsModalOpen } = useTasks();
+    const { profile } = useProfile();
+
+    const [aiPlan, setAiPlan] = useState('');
+    const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
+    const [aiError, setAiError] = useState('');
+
+    const generateAIPlan = async () => {
+        setIsGeneratingPlan(true);
+        setAiError('');
+        try {
+            const pendingTasks = tasks.filter(t => t.status === 'pending');
+            const plan = await AIClient.generateDailyPlan(pendingTasks, { name: profile?.name, role: profile?.role });
+            setAiPlan(plan);
+        } catch (err) {
+            setAiError(err.message);
+        } finally {
+            setIsGeneratingPlan(false);
+        }
+    };
 
     const highPriorityTasks = sortedTasks.filter(t => t.status === 'pending').slice(0, 4);
     const completedRate = getCompletionRate();
@@ -56,6 +77,52 @@ export default function Dashboard() {
 
             {/* Lab: Focus Flow */}
             <FocusFlow />
+
+            {/* Premium AI Planner Panel */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="bg-gradient-to-br from-indigo-500/[0.05] to-purple-500/[0.1] border border-indigo-500/20 rounded-2xl p-6 relative overflow-hidden"
+            >
+                <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                    <Sparkles size={120} />
+                </div>
+                <div className="relative z-10 flex flex-col md:flex-row md:items-start justify-between gap-6">
+                    <div className="flex-1">
+                        <h2 className="text-xl font-bold text-[var(--text-primary)] flex items-center gap-2 mb-2">
+                            <Sparkles className="text-indigo-400" size={20} />
+                            AI Daily Planner
+                        </h2>
+                        <p className="text-sm text-[var(--text-primary)] opacity-70 mb-4">
+                            Let TickTasker Intelligence analyze your tasks, deadlines, and priorities to generate an optimized action plan for today.
+                        </p>
+                        
+                        {aiError && (
+                            <div className="text-red-400 text-xs bg-red-500/10 p-2 rounded border border-red-500/20 mb-4 inline-block">
+                                Error: {aiError}
+                            </div>
+                        )}
+
+                        {aiPlan ? (
+                            <div className="bg-[var(--bg-base)]/50 backdrop-blur-sm border border-[var(--border-base)] rounded-xl p-5 text-sm text-[var(--text-primary)] leading-relaxed prose prose-invert">
+                                {aiPlan.split('\\n').map((line, i) => (
+                                    <p key={i} className="mb-2 last:mb-0">{line}</p>
+                                ))}
+                            </div>
+                        ) : (
+                            <button
+                                onClick={generateAIPlan}
+                                disabled={isGeneratingPlan}
+                                className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isGeneratingPlan ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />}
+                                {isGeneratingPlan ? 'Analyzing Tasks...' : 'Generate Plan'}
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </motion.div>
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

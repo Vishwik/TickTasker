@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../context/TaskContext';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Sparkles, RefreshCw } from 'lucide-react';
+import { AIClient } from '../utils/aiClient';
+import { useProfile } from '../context/ProfileContext';
 
 export default function AddTaskModal() {
     const {
@@ -23,6 +25,10 @@ export default function AddTaskModal() {
         category: 'Academic',
         duration: 0 // Minutes
     });
+    
+    const { profile } = useProfile();
+    const [isParsing, setIsParsing] = useState(false);
+    const [parseError, setParseError] = useState('');
 
     const deadlineInputRef = React.useRef(null);
 
@@ -72,6 +78,26 @@ export default function AddTaskModal() {
         setNewTask({ title: '', deadline: '', importance: 'Medium', category: 'Academic', duration: 0 });
     };
 
+    const handleAIParsing = async () => {
+        if (!newTask.title) return;
+        setIsParsing(true);
+        setParseError('');
+        try {
+            const parsed = await AIClient.parseTask(newTask.title, { name: profile?.name, role: profile?.role });
+            setNewTask(prev => ({
+                ...prev,
+                title: parsed.title || prev.title,
+                deadline: parsed.deadline || prev.deadline,
+                importance: parsed.importance || prev.importance,
+                category: parsed.category || prev.category
+            }));
+        } catch (err) {
+            setParseError(err.message);
+        } finally {
+            setIsParsing(false);
+        }
+    };
+
     const durationOptions = [
         { label: '15m', value: 15 },
         { label: '30m', value: 30 },
@@ -97,18 +123,30 @@ export default function AddTaskModal() {
 
                         <form onSubmit={handleAddTask} className="p-8 space-y-6">
                             <div>
-                                <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60 mb-2">What needs to be done?</label>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60">What needs to be done?</label>
+                                    <button 
+                                        type="button" 
+                                        onClick={handleAIParsing}
+                                        disabled={!newTask.title || isParsing}
+                                        className="text-xs font-bold text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10 hover:bg-[rgb(var(--color-accent))]/20 px-2 py-1 rounded flex items-center gap-1 disabled:opacity-50 transition-colors"
+                                    >
+                                        {isParsing ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                        {isParsing ? 'Parsing...' : 'Magic Auto-Fill'}
+                                    </button>
+                                </div>
                                 <input
                                     type="text"
                                     required
                                     value={newTask.title}
                                     onChange={e => setNewTask({ ...newTask, title: e.target.value })}
                                     className="w-full bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl px-5 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))] focus:ring-1 focus:ring-[rgb(var(--color-accent))] transition-all placeholder-[var(--text-primary)]/30"
-                                    placeholder="e.g. Finish Machine Learning Report"
+                                    placeholder="e.g. Finish Machine Learning Report by tomorrow 5pm"
                                     autoFocus={!newTaskInitialTitle} // Only autofocus if not pre-filled
                                     onInvalid={e => e.target.setCustomValidity('Please name your task to continue.')}
                                     onInput={e => e.target.setCustomValidity('')}
                                 />
+                                {parseError && <p className="text-red-500 text-xs mt-1">{parseError}</p>}
                             </div>
 
                             <div className="grid grid-cols-2 gap-6">
