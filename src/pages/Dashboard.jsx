@@ -181,7 +181,7 @@ export default function Dashboard() {
                             <h3 className="text-xl font-medium text-[var(--text-primary)]">Your queue is clear</h3>
                             <p className="mt-2 text-sm text-[var(--text-primary)] opacity-60">Enjoy the calm, or capture a new goal.</p>
                             <button
-                                onClick={() => document.dispatchEvent(new CustomEvent('openAddTask'))}
+                                onClick={() => setIsAddTaskModalOpen(true)}
                                 className="mt-6 px-6 py-2 bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/90 text-white rounded-xl font-bold transition-all active:scale-95 shadow-lg shadow-[rgb(var(--color-accent))]/25"
                             >
                                 Create First Task
