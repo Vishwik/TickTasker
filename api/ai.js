@@ -23,6 +23,13 @@ if (!admin.apps.length) {
 // Initialize Gemini
 const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Guard: check for required environment variables at startup
+const missingEnvVars = ['GEMINI_API_KEY', 'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']
+    .filter(key => !process.env[key]);
+if (missingEnvVars.length > 0) {
+    console.error('Missing required environment variables:', missingEnvVars.join(', '));
+}
+
 export default async function handler(req, res) {
     // Enable CORS for local development
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -146,8 +153,8 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Unknown action' });
         }
 
-        // 4. Call Gemini
-        const modelName = 'gemini-2.5-flash';
+        // 4. Call Gemini — use gemini-1.5-flash (stable and widely available)
+        const modelName = 'gemini-1.5-flash';
         let resultText = '';
         
         if (responseSchema) {
@@ -181,6 +188,9 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error("AI API Error:", error);
-        return res.status(500).json({ error: 'Internal Server Error', details: error.message });
+        return res.status(500).json({ 
+            error: `Internal Server Error: ${error.message}`,
+            details: error.message 
+        });
     }
 }
