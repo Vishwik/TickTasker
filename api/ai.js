@@ -175,7 +175,7 @@ export default async function handler(req, res) {
         }
 
         // 4. Call Gemini
-        const modelName = 'gemini-2.5-flash';
+        const modelName = 'gemini-1.5-flash';
         let resultText = '';
         
         if (responseSchema) {
