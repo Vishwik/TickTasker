@@ -1,4 +1,5 @@
 import admin from 'firebase-admin';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Set Vercel max duration for this serverless function (in seconds)
 export const maxDuration = 60;
@@ -19,9 +20,37 @@ if (!admin.apps.length) {
     }
 }
 
+function getNormalizedEnvValue(...keys) {
+    for (const key of keys) {
+        const rawValue = process.env[key];
+        if (!rawValue) continue;
+
+        const trimmed = rawValue.trim();
+        const unquoted = trimmed.replace(/^['"]|['"]$/g, '');
+
+        if (unquoted) {
+            return unquoted;
+        }
+    }
+
+    return undefined;
+}
+
+function buildPromptFromMessages(messages, jsonMode = false) {
+    const prompt = messages
+        .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+        .join('\n\n');
+
+    if (!jsonMode) {
+        return prompt;
+    }
+
+    return `${prompt}\n\nReturn valid JSON only. Do not wrap the response in markdown fences.`;
+}
+
 async function callGrok(messages, jsonMode = false) {
-    const apiKey = process.env.GROK_API_KEY;
-    if (!apiKey) throw new Error('GROK_API_KEY is not set in environment variables.');
+    const apiKey = getNormalizedEnvValue('GROK_API_KEY', 'XAI_API_KEY');
+    if (!apiKey) throw new Error('GROK_API_KEY or XAI_API_KEY is not set in environment variables.');
 
     const body = {
         model: 'grok-3-mini',
@@ -48,6 +77,38 @@ async function callGrok(messages, jsonMode = false) {
     return data.choices[0].message.content;
 }
 
+async function callGemini(messages, jsonMode = false) {
+    const apiKey = getNormalizedEnvValue('GEMINI_API_KEY');
+    if (!apiKey) throw new Error('GEMINI_API_KEY is not set in environment variables.');
+
+    const ai = new GoogleGenerativeAI(apiKey);
+    const model = ai.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: {
+            temperature: jsonMode ? 0.1 : 0.7,
+            ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+        },
+    });
+
+    const result = await model.generateContent(buildPromptFromMessages(messages, jsonMode));
+    return result.response.text();
+}
+
+async function callAI(messages, jsonMode = false) {
+    const hasGemini = !!getNormalizedEnvValue('GEMINI_API_KEY');
+    const hasGrok = !!getNormalizedEnvValue('GROK_API_KEY', 'XAI_API_KEY');
+
+    if (hasGemini) {
+        return callGemini(messages, jsonMode);
+    }
+
+    if (hasGrok) {
+        return callGrok(messages, jsonMode);
+    }
+
+    throw new Error('No AI provider is configured. Set GEMINI_API_KEY or GROK_API_KEY.');
+}
+
 export default async function handler(req, res) {
     // Enable CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
@@ -59,8 +120,11 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     // Validate required env vars
-    const requiredVars = ['GROK_API_KEY', 'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY'];
+    const requiredVars = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY'];
     const missingVars = requiredVars.filter(key => !process.env[key]);
+    if (!getNormalizedEnvValue('GEMINI_API_KEY') && !getNormalizedEnvValue('GROK_API_KEY', 'XAI_API_KEY')) {
+        missingVars.unshift('GEMINI_API_KEY or GROK_API_KEY/XAI_API_KEY');
+    }
     if (missingVars.length > 0) {
         return res.status(500).json({ error: `Server Configuration Error: Missing secrets: ${missingVars.join(', ')}` });
     }
@@ -94,7 +158,7 @@ export default async function handler(req, res) {
                     content: `${userCtxStr} Break down this task into 3-5 subtasks: "${data.title}"`
                 }
             ];
-            const text = await callGrok(messages, true);
+            const text = await callAI(messages, true);
             const parsed = JSON.parse(text);
             // Handle both array and {subtasks:[]} shapes
             const result = Array.isArray(parsed) ? parsed : (parsed.subtasks || parsed.tasks || Object.values(parsed)[0]);
@@ -126,7 +190,7 @@ Today is ${dateString}, current time is ${timeString}.`
                     content: `${userCtxStr} Parse this task: "${data.text}"`
                 }
             ];
-            const text = await callGrok(messages, true);
+            const text = await callAI(messages, true);
             return res.status(200).json(JSON.parse(text));
 
         } else if (action === 'prioritize') {
@@ -140,7 +204,7 @@ Today is ${dateString}, current time is ${timeString}.`
                     content: `${userCtxStr} Pick the top 3 tasks to focus on now from: ${JSON.stringify(data.tasks)}`
                 }
             ];
-            const text = await callGrok(messages, true);
+            const text = await callAI(messages, true);
             return res.status(200).json(JSON.parse(text));
 
         } else if (action === 'daily_plan') {
@@ -154,7 +218,7 @@ Today is ${dateString}, current time is ${timeString}.`
                     content: `${userCtxStr} Generate a daily plan for these tasks: ${JSON.stringify(data.tasks)}`
                 }
             ];
-            const text = await callGrok(messages, false);
+            const text = await callAI(messages, false);
             return res.status(200).json({ plan: text });
 
         } else {
@@ -164,12 +228,12 @@ Today is ${dateString}, current time is ${timeString}.`
     } catch (error) {
         console.error("AI API Error:", error);
         let errorMessage = error.message || 'An unexpected error occurred.';
-        if (errorMessage.includes('401') || errorMessage.includes('invalid_api_key')) {
-            errorMessage = 'The Grok API Key is invalid. Please update it in Vercel environment variables.';
+        if (errorMessage.includes('401') || errorMessage.includes('invalid_api_key') || errorMessage.includes('API key not valid')) {
+            errorMessage = 'The AI API key is invalid. Please update GEMINI_API_KEY or GROK_API_KEY in Vercel environment variables.';
         } else if (errorMessage.includes('429')) {
             errorMessage = 'Rate limit reached. Please wait a moment and try again.';
         } else if (errorMessage.includes('fetch') || errorMessage.includes('ECONNREFUSED')) {
-            errorMessage = 'Failed to connect to the Grok API. The service might be temporarily unavailable.';
+            errorMessage = 'Failed to connect to the AI provider. The service might be temporarily unavailable.';
         }
         return res.status(500).json({ error: errorMessage, details: error.toString() });
     }
