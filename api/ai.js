@@ -20,15 +20,7 @@ if (!admin.apps.length) {
     }
 }
 
-// Initialize Gemini
-const ai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Guard: check for required environment variables at startup
-const missingEnvVars = ['GEMINI_API_KEY', 'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']
-    .filter(key => !process.env[key]);
-if (missingEnvVars.length > 0) {
-    console.error('Missing required environment variables:', missingEnvVars.join(', '));
-}
+// We will initialize Gemini inside the handler to gracefully catch missing keys
 
 export default async function handler(req, res) {
     // Enable CORS for local development
@@ -46,8 +38,23 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // 1. Validate Environment Variables before doing anything
+    const requiredVars = ['GEMINI_API_KEY', 'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY'];
+    const missingVars = requiredVars.filter(key => !process.env[key]);
+    
+    if (missingVars.length > 0) {
+        return res.status(500).json({ 
+            error: `Server Configuration Error: Missing required backend secrets: ${missingVars.join(', ')}. Please add them to Vercel.` 
+        });
+    }
+
+    // 2. Initialize Gemini with the guaranteed key
+    // Ensure we don't accidentally use a VITE_ prefixed key
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const ai = new GoogleGenerativeAI(geminiKey);
+
     try {
-        // 1. Verify Authentication
+        // 3. Verify Authentication
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
@@ -188,9 +195,19 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error("AI API Error:", error);
+        
+        let errorMessage = error.message;
+        
+        // Friendly error mapping for known Gemini issues
+        if (errorMessage.includes('API_KEY_INVALID')) {
+            errorMessage = "The Gemini API Key provided is invalid. Please generate a new key from Google AI Studio and update your Vercel Environment Variables.";
+        } else if (errorMessage.includes('fetch')) {
+            errorMessage = "Failed to connect to the Gemini API. The service might be down or blocked.";
+        }
+
         return res.status(500).json({ 
-            error: `Internal Server Error: ${error.message}`,
-            details: error.message 
+            error: errorMessage,
+            details: error.toString() 
         });
     }
 }
