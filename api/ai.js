@@ -86,21 +86,29 @@ export default async function handler(req, res) {
                 Extract task details from this natural language input.
                 ${userCtxStr}
                 Input: "${data.text}"
+
+                Categorization Rules:
+                - "Personal": watch movie, gym, cook food, groceries, relax, chores
+                - "Academic": study, assignment, exam prep, homework, tutorial
+                - "Career": resume, internship, apply jobs, interview prep
+                - "Lab": lab record, coding practical, viva prep, experiment
+                If confidence is low, fall back to "Personal".
+
                 Output strictly as a JSON object with:
                 - title (string: clean, actionable task name)
                 - deadline (string: YYYY-MM-DD format based on today's date ${new Date().toISOString().split('T')[0]}, or null if none)
-                - importance (string: 'High', 'Medium', or 'Low')
-                - category (string: inferred category)
+                - priority (string: 'High', 'Medium', or 'Low')
+                - category (string: inferred category from the list above)
             `;
             responseSchema = {
                 type: "object",
                 properties: {
                     title: { type: "string" },
                     deadline: { type: "string", nullable: true },
-                    importance: { type: "string" },
+                    priority: { type: "string" },
                     category: { type: "string" }
                 },
-                required: ["title", "importance", "category"]
+                required: ["title", "priority", "category"]
             };
         } else if (action === 'prioritize') {
              prompt = `

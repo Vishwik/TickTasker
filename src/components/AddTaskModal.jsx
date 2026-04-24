@@ -22,7 +22,7 @@ export default function AddTaskModal() {
         title: '',
         deadline: '',
         importance: 'Medium',
-        category: 'Academic',
+        category: 'Personal',
         duration: 0 // Minutes
     });
     
@@ -52,7 +52,7 @@ export default function AddTaskModal() {
             setTimeout(() => deadlineInputRef.current?.showPicker ? deadlineInputRef.current?.showPicker() : deadlineInputRef.current?.focus(), 500);
         } else if (isAddTaskModalOpen && !editingTaskId && !newTaskInitialTitle) {
             // Reset if just opening normally
-            setNewTask(prev => ({ ...prev, title: '', deadline: '', importance: 'Medium', category: 'Academic', duration: 0 }));
+            setNewTask(prev => ({ ...prev, title: '', deadline: '', importance: 'Medium', category: 'Personal', duration: 0 }));
         }
     }, [editingTaskId, tasks, isAddTaskModalOpen, newTaskInitialTitle]);
 
@@ -60,7 +60,7 @@ export default function AddTaskModal() {
         setIsAddTaskModalOpen(false);
         setEditingTaskId(null);
         setNewTaskInitialTitle('');
-        setNewTask({ title: '', deadline: '', importance: 'Medium', category: 'Academic', duration: 0 });
+        setNewTask({ title: '', deadline: '', importance: 'Medium', category: 'Personal', duration: 0 });
     };
 
     const handleAddTask = (e) => {
@@ -75,7 +75,7 @@ export default function AddTaskModal() {
         }
 
         setIsAddTaskModalOpen(false);
-        setNewTask({ title: '', deadline: '', importance: 'Medium', category: 'Academic', duration: 0 });
+        setNewTask({ title: '', deadline: '', importance: 'Medium', category: 'Personal', duration: 0 });
     };
 
     const handleAIParsing = async () => {
@@ -88,7 +88,7 @@ export default function AddTaskModal() {
                 ...prev,
                 title: parsed.title || prev.title,
                 deadline: parsed.deadline || prev.deadline,
-                importance: parsed.importance || prev.importance,
+                importance: parsed.priority || prev.importance,
                 category: parsed.category || prev.category
             }));
         } catch (err) {

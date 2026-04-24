@@ -23,15 +23,7 @@ export const TaskProvider = ({ children }) => {
     const [syncStatus, setSyncStatus] = useState('offline'); // 'offline', 'syncing', 'synced', 'error'
 
     // Tasks State
-    const [tasks, setTasks] = useState(() => {
-        const saved = localStorage.getItem('ticktasker_tasks');
-        return saved ? JSON.parse(saved) : [
-            { id: generateUUID(), title: 'Machine Learning Project', importance: 'High', deadline: new Date(Date.now() + 86400000).toISOString().split('T')[0], status: 'pending', category: 'Academic' },
-            { id: generateUUID(), title: 'Web Lab Record', importance: 'Medium', deadline: new Date(Date.now() + 172800000).toISOString().split('T')[0], status: 'pending', category: 'Lab' },
-            { id: generateUUID(), title: 'Internship Application', importance: 'High', deadline: new Date(Date.now() + 432000000).toISOString().split('T')[0], status: 'pending', category: 'Career' },
-            { id: generateUUID(), title: 'Weekly Gym Session', importance: 'Low', deadline: new Date(Date.now() + 604800000).toISOString().split('T')[0], status: 'completed', category: 'Personal' },
-        ];
-    });
+    const [tasks, setTasks] = useState([]);
 
     const categoryStats = React.useMemo(() => {
         return tasks.reduce((acc, t) => {
@@ -42,15 +34,13 @@ export const TaskProvider = ({ children }) => {
         }, {});
     }, [tasks]);
 
-    const [aiModel, setAiModel] = useState(() => {
-        const saved = localStorage.getItem('ticktasker_ai_model');
-        return saved ? JSON.parse(saved) : DEFAULT_MODEL;
-    });
+    const [aiModel, setAiModel] = useState(DEFAULT_MODEL);
 
     const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+    const [settingsActiveTab, setSettingsActiveTab] = useState('appearance');
     const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
     const [breakdownTask, setBreakdownTask] = useState(null);
     const [editingTaskId, setEditingTaskId] = useState(null);
@@ -61,15 +51,8 @@ export const TaskProvider = ({ children }) => {
         status: 'all', timeFrame: null, priority: [], category: []
     });
 
-    const [preferences, setPreferences] = useState(() => {
-        const saved = localStorage.getItem('ticktasker_preferences');
-        return saved ? JSON.parse(saved) : { labs_focusFlow: false, labs_weeklyGoals: false, labs_experimentalAI: false };
-    });
-
-    const [theme, setTheme] = useState(() => {
-        const saved = localStorage.getItem('ticktasker_theme');
-        return saved ? JSON.parse(saved) : { mode: 'dark', accent: 'indigo', density: 'comfortable', radius: 'soft', fontScale: 'normal' };
-    });
+    const [preferences, setPreferences] = useState({ labs_focusFlow: false, labs_weeklyGoals: false, labs_experimentalAI: false });
+    const [theme, setTheme] = useState({ mode: 'dark', accent: 'indigo', density: 'comfortable', radius: 'soft', fontScale: 'normal' });
 
     // Theme Effect
     useEffect(() => {
@@ -93,7 +76,6 @@ export const TaskProvider = ({ children }) => {
         root.style.setProperty('--font-scale', theme.fontScale === 'normal' ? '1' : '1.1');
         root.style.setProperty('--space-unit', theme.density === 'comfortable' ? '1rem' : '0.75rem');
 
-        if (!user) localStorage.setItem('ticktasker_theme', JSON.stringify(theme));
         root.className = `theme-${theme.mode}`;
     }, [theme, user]);
 
@@ -115,12 +97,7 @@ export const TaskProvider = ({ children }) => {
 
     // Firebase Sync Effect
     useEffect(() => {
-        if (!user) {
-            setSyncStatus('offline');
-            const savedTasks = localStorage.getItem('ticktasker_tasks');
-            if (savedTasks) setTasks(JSON.parse(savedTasks));
-            return;
-        }
+        if (!user) return;
 
         setSyncStatus('syncing');
 
@@ -131,25 +108,6 @@ export const TaskProvider = ({ children }) => {
         getDoc(doc(db, `users/${user.uid}/profile`, 'theme')).then(docSnap => {
             if (docSnap.exists()) setTheme(docSnap.data());
         });
-
-        // Migration Check
-        const savedTasksStr = localStorage.getItem('ticktasker_tasks');
-        const savedTasks = savedTasksStr ? JSON.parse(savedTasksStr) : [];
-        if (savedTasks.length > 0 && !localStorage.getItem(`migrated_${user.uid}`)) {
-            if (window.confirm("You have local tasks. Do you want to import them to your account?")) {
-                const batch = writeBatch(db);
-                savedTasks.forEach(task => {
-                    batch.set(doc(db, `users/${user.uid}/tasks`, task.id), task);
-                });
-                batch.commit().then(() => {
-                    localStorage.setItem(`migrated_${user.uid}`, 'true');
-                    localStorage.removeItem('ticktasker_tasks');
-                    alert("Tasks imported successfully!");
-                }).catch(console.error);
-            } else {
-                localStorage.setItem(`migrated_${user.uid}`, 'true');
-            }
-        }
 
         // Real-time listener for tasks
         const unsubscribe = onSnapshot(collection(db, `users/${user.uid}/tasks`), (snapshot) => {
@@ -163,15 +121,6 @@ export const TaskProvider = ({ children }) => {
 
         return () => unsubscribe();
     }, [user]);
-
-    // Local Persistence (Only when logged out)
-    useEffect(() => {
-        if (!user) {
-            localStorage.setItem('ticktasker_tasks', JSON.stringify(tasks));
-            localStorage.setItem('ticktasker_preferences', JSON.stringify(preferences));
-        }
-        localStorage.setItem('ticktasker_ai_model', JSON.stringify(aiModel));
-    }, [tasks, preferences, aiModel, user]);
 
     const sortedTasks = React.useMemo(() => {
         const topLevelTasks = tasks.filter(t => !t.parentId && t.status !== 'deleted');
@@ -273,8 +222,6 @@ export const TaskProvider = ({ children }) => {
         
         if (user) {
             await setDoc(doc(db, `users/${user.uid}/tasks`, newTask.id), newTask);
-        } else {
-            setTasks(prev => [...prev, newTask]);
         }
     };
 
@@ -303,8 +250,6 @@ export const TaskProvider = ({ children }) => {
 
         if (user) {
             await updateDoc(doc(db, `users/${user.uid}/tasks`, id), updatedFields);
-        } else {
-            setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updatedFields } : t));
         }
     };
 
@@ -321,8 +266,6 @@ export const TaskProvider = ({ children }) => {
         const finalUpdate = { ...updatedFields, updatedAt: new Date().toISOString() };
         if (user) {
             await updateDoc(doc(db, `users/${user.uid}/tasks`, id), finalUpdate);
-        } else {
-            setTasks(prev => prev.map(t => t.id === id ? { ...t, ...finalUpdate } : t));
         }
     };
 
@@ -340,8 +283,6 @@ export const TaskProvider = ({ children }) => {
                 batch.update(doc(db, `users/${user.uid}/tasks`, taskId), { status: 'deleted', updatedAt: now });
             });
             await batch.commit();
-        } else {
-            setTasks(prev => prev.map(t => idsToDelete.includes(t.id) ? { ...t, status: 'deleted', updatedAt: now } : t));
         }
     };
 
@@ -361,11 +302,6 @@ export const TaskProvider = ({ children }) => {
             createdTasks.forEach(task => batch.set(doc(db, `users/${user.uid}/tasks`, task.id), task));
             batch.update(doc(db, `users/${user.uid}/tasks`, parentId), { childIds: combinedChildIds, isExpanded: true });
             await batch.commit();
-        } else {
-            setTasks(prev => {
-                const withNew = [...prev, ...createdTasks];
-                return withNew.map(t => t.id === parentId ? { ...t, childIds: combinedChildIds, isExpanded: true } : t);
-            });
         }
     };
 
@@ -375,8 +311,6 @@ export const TaskProvider = ({ children }) => {
         
         if (user) {
             await updateDoc(doc(db, `users/${user.uid}/tasks`, id), { isExpanded: !task.isExpanded });
-        } else {
-            setTasks(prev => prev.map(t => t.id === id ? { ...t, isExpanded: !t.isExpanded } : t));
         }
     };
 
@@ -415,6 +349,7 @@ export const TaskProvider = ({ children }) => {
             addTask, updateTaskStatus, editTask, deleteTask, getCompletionRate, getInsights, getWeeklySnapshot,
             isAddTaskModalOpen, setIsAddTaskModalOpen, notifications, markAllAsRead, clearNotifications,
             isCommandPaletteOpen, setIsCommandPaletteOpen, isSettingsModalOpen, setIsSettingsModalOpen,
+            settingsActiveTab, setSettingsActiveTab,
             isPrivacyModalOpen, setIsPrivacyModalOpen, breakdownTask, setBreakdownTask, editingTaskId, setEditingTaskId,
             aiModel, addSubtasks, toggleTaskExpansion, preferences, togglePreference, setPreferences,
             newTaskInitialTitle, setNewTaskInitialTitle, theme, updateTheme, setTheme, setTasks,
