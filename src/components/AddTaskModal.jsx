@@ -169,10 +169,10 @@ export default function AddTaskModal() {
                                             onChange={e => setNewTask({ ...newTask, category: e.target.value })}
                                             className="w-full bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))] appearance-none"
                                         >
-                                            <option>Academic</option>
-                                            <option>Personal</option>
-                                            <option>Career</option>
-                                            <option>Lab</option>
+                                            <option className="bg-[var(--bg-surface)] text-[var(--text-primary)]">Academic</option>
+                                            <option className="bg-[var(--bg-surface)] text-[var(--text-primary)]">Personal</option>
+                                            <option className="bg-[var(--bg-surface)] text-[var(--text-primary)]">Career</option>
+                                            <option className="bg-[var(--bg-surface)] text-[var(--text-primary)]">Lab</option>
                                         </select>
                                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-primary)] opacity-50 pointer-events-none" size={16} />
                                     </div>
