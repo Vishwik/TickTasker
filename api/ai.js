@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import admin from 'firebase-admin';
 
 // Set Vercel max duration for this serverless function (in seconds)
@@ -20,208 +19,158 @@ if (!admin.apps.length) {
     }
 }
 
-// We will initialize Gemini inside the handler to gracefully catch missing keys
+async function callGrok(messages, jsonMode = false) {
+    const apiKey = process.env.GROK_API_KEY;
+    if (!apiKey) throw new Error('GROK_API_KEY is not set in environment variables.');
+
+    const body = {
+        model: 'grok-3-mini',
+        messages,
+        temperature: jsonMode ? 0.1 : 0.7,
+        ...(jsonMode && { response_format: { type: 'json_object' } }),
+    };
+
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Grok API error ${response.status}: ${err}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+}
 
 export default async function handler(req, res) {
-    // Enable CORS for local development
+    // Enable CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
 
-    if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
-    }
+    if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
-
-    // 1. Validate Environment Variables before doing anything
-    const requiredVars = ['GEMINI_API_KEY', 'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY'];
+    // Validate required env vars
+    const requiredVars = ['GROK_API_KEY', 'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY'];
     const missingVars = requiredVars.filter(key => !process.env[key]);
-    
     if (missingVars.length > 0) {
-        return res.status(500).json({ 
-            error: `Server Configuration Error: Missing required backend secrets: ${missingVars.join(', ')}. Please add them to Vercel.` 
-        });
+        return res.status(500).json({ error: `Server Configuration Error: Missing secrets: ${missingVars.join(', ')}` });
     }
-
-    // 2. Initialize Gemini with the guaranteed key
-    // Ensure we don't accidentally use a VITE_ prefixed key
-    const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-    const ai = new GoogleGenerativeAI(geminiKey);
 
     try {
-        // 3. Verify Authentication
+        // Verify Firebase Auth token
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
         }
-
         const idToken = authHeader.split('Bearer ')[1];
-        let decodedToken;
         try {
-            decodedToken = await admin.auth().verifyIdToken(idToken);
+            await admin.auth().verifyIdToken(idToken);
         } catch (error) {
-            console.error("Token verification failed:", error);
             return res.status(401).json({ error: 'Unauthorized: Invalid token' });
         }
 
-        // 3. Process Request
         const { action, data, userContext } = req.body;
+        if (!action) return res.status(400).json({ error: 'Missing action parameter' });
 
-        if (!action) {
-            return res.status(400).json({ error: 'Missing action parameter' });
-        }
-
-        const userCtxStr = userContext ? `User Context: Name: ${userContext.name}, Role: ${userContext.role}.` : '';
-
-        let prompt = '';
-        let responseSchema = null;
+        const userCtxStr = userContext ? `User: ${userContext.name}, Role: ${userContext.role}.` : '';
 
         if (action === 'breakdown') {
-            prompt = `
-                You are a productivity expert. Break down the following task into 3-5 manageable subtasks.
-                ${userCtxStr}
-                Task: "${data.title}"
-                Output strictly as a JSON array of objects. Each object must have:
-                - title (string)
-                - duration (string, e.g., "30m", "1h")
-                - category (string, pick one: Academic, Personal, Work, Career, Home, Health)
-            `;
-            responseSchema = {
-                type: "array",
-                items: {
-                    type: "object",
-                    properties: {
-                        title: { type: "string" },
-                        duration: { type: "string" },
-                        category: { type: "string" }
-                    },
-                    required: ["title", "duration", "category"]
+            const messages = [
+                {
+                    role: 'system',
+                    content: 'You are a productivity expert. Always respond with valid JSON only — no markdown, no explanation. Output a JSON array of subtask objects with fields: title (string), duration (string like "30m" or "1h"), category (one of: Academic, Personal, Work, Career, Home, Health).'
+                },
+                {
+                    role: 'user',
+                    content: `${userCtxStr} Break down this task into 3-5 subtasks: "${data.title}"`
                 }
-            };
+            ];
+            const text = await callGrok(messages, true);
+            const parsed = JSON.parse(text);
+            // Handle both array and {subtasks:[]} shapes
+            const result = Array.isArray(parsed) ? parsed : (parsed.subtasks || parsed.tasks || Object.values(parsed)[0]);
+            return res.status(200).json(result);
+
         } else if (action === 'parse_task') {
-            // Get local current time string for AI reference
             const now = new Date();
             const timeString = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
             const dateString = now.toISOString().split('T')[0];
 
-            prompt = `
-                Extract task details from this natural language input.
-                ${userCtxStr}
-                System Current Time: ${dateString} ${timeString}
-                Input: "${data.text}"
+            const messages = [
+                {
+                    role: 'system',
+                    content: `You are a task parser. Always respond with valid JSON only — no markdown, no explanation.
+Output a JSON object with these exact fields:
+- title (string: clean task name)
+- deadlineDate (string: YYYY-MM-DD or null)
+- deadlineTime (string: HH:MM 24h format or null)
+- allDay (boolean: true if no specific time mentioned)
+- priority (string: "High", "Medium", or "Low")
+- category (string: one of Academic, Personal, Career, Lab)
 
-                Categorization Rules:
-                - "Personal": watch movie, gym, cook food, groceries, relax, chores
-                - "Academic": study, assignment, exam prep, homework, tutorial
-                - "Career": resume, internship, apply jobs, interview prep
-                - "Lab": lab record, coding practical, viva prep, experiment
-                If confidence is low, fall back to "Personal".
-
-                Time Parsing Rules:
-                - If the user specifies a time (e.g., "tonight at 8", "3pm"), set 'deadlineTime' to the 24-hour HH:MM format (e.g., "20:00", "15:00") and set 'allDay' to false.
-                - If the user does not specify a time (e.g., "tomorrow", "friday"), leave 'deadlineTime' null and set 'allDay' to true.
-
-                Output strictly as a JSON object with:
-                - title (string: clean, actionable task name)
-                - deadlineDate (string: YYYY-MM-DD format based on today's date ${dateString}, or null if none)
-                - deadlineTime (string: HH:MM 24-hour format, or null if none)
-                - allDay (boolean: true if no specific time is mentioned)
-                - priority (string: 'High', 'Medium', or 'Low')
-                - category (string: inferred category from the list above)
-            `;
-            responseSchema = {
-                type: "object",
-                properties: {
-                    title: { type: "string" },
-                    deadlineDate: { type: "string", nullable: true },
-                    deadlineTime: { type: "string", nullable: true },
-                    allDay: { type: "boolean" },
-                    priority: { type: "string" },
-                    category: { type: "string" }
+Category rules: Personal=movies/gym/cook/relax, Academic=study/assignment/exam, Career=resume/interview, Lab=lab/practical/viva.
+Time rules: if user says "tonight at 8" set deadlineTime="20:00" and allDay=false. If no time mentioned set deadlineTime=null and allDay=true.
+Today is ${dateString}, current time is ${timeString}.`
                 },
-                required: ["title", "priority", "category", "allDay"]
-            };
+                {
+                    role: 'user',
+                    content: `${userCtxStr} Parse this task: "${data.text}"`
+                }
+            ];
+            const text = await callGrok(messages, true);
+            return res.status(200).json(JSON.parse(text));
+
         } else if (action === 'prioritize') {
-             prompt = `
-                You are an AI planner. Analyze these pending tasks and recommend the top 3 tasks to focus on right now.
-                ${userCtxStr}
-                Tasks: ${JSON.stringify(data.tasks)}
-                Output strictly as a JSON object with:
-                - topTasks: Array of exactly 3 task IDs.
-                - reasoning: A short, motivating string explaining why these 3 were chosen.
-            `;
-            responseSchema = {
-                 type: "object",
-                 properties: {
-                     topTasks: { type: "array", items: { type: "string" } },
-                     reasoning: { type: "string" }
-                 },
-                 required: ["topTasks", "reasoning"]
-            };
+            const messages = [
+                {
+                    role: 'system',
+                    content: 'You are an AI planner. Always respond with valid JSON only. Output a JSON object with: topTasks (array of exactly 3 task ID strings), reasoning (short motivating string).'
+                },
+                {
+                    role: 'user',
+                    content: `${userCtxStr} Pick the top 3 tasks to focus on now from: ${JSON.stringify(data.tasks)}`
+                }
+            ];
+            const text = await callGrok(messages, true);
+            return res.status(200).json(JSON.parse(text));
+
         } else if (action === 'daily_plan') {
-             prompt = `
-                You are an AI planner. Generate a short, motivating daily plan based on these pending tasks.
-                ${userCtxStr}
-                Tasks: ${JSON.stringify(data.tasks)}
-                Keep it under 3 short paragraphs. Output as plain text (Markdown is fine). No JSON.
-            `;
+            const messages = [
+                {
+                    role: 'system',
+                    content: 'You are a motivating AI planner. Write a short, energetic daily plan in 2-3 paragraphs. Markdown is fine. Be concise and actionable.'
+                },
+                {
+                    role: 'user',
+                    content: `${userCtxStr} Generate a daily plan for these tasks: ${JSON.stringify(data.tasks)}`
+                }
+            ];
+            const text = await callGrok(messages, false);
+            return res.status(200).json({ plan: text });
+
         } else {
             return res.status(400).json({ error: 'Unknown action' });
         }
 
-        // 4. Call Gemini
-        const modelName = 'gemini-1.5-flash';
-        let resultText = '';
-        
-        if (responseSchema) {
-             const model = ai.getGenerativeModel({
-                 model: modelName,
-                 generationConfig: {
-                     responseMimeType: "application/json",
-                     responseSchema: responseSchema,
-                     temperature: 0.2
-                 }
-             });
-             const result = await model.generateContent(prompt);
-             resultText = result.response.text();
-        } else {
-             const model = ai.getGenerativeModel({
-                 model: modelName,
-                 generationConfig: {
-                     temperature: 0.7
-                 }
-             });
-             const result = await model.generateContent(prompt);
-             resultText = result.response.text();
-        }
-        
-        // Return parsed JSON if schema was provided, otherwise return string
-        if (responseSchema) {
-            return res.status(200).json(JSON.parse(resultText));
-        } else {
-            return res.status(200).json({ plan: resultText });
-        }
-
     } catch (error) {
         console.error("AI API Error:", error);
-        
-        let errorMessage = error.message;
-        
-        // Friendly error mapping for known Gemini issues
-        if (errorMessage.includes('API_KEY_INVALID')) {
-            errorMessage = "The Gemini API Key provided is invalid. Please generate a new key from Google AI Studio and update your Vercel Environment Variables.";
-        } else if (errorMessage.includes('fetch')) {
-            errorMessage = "Failed to connect to the Gemini API. The service might be down or blocked.";
+        let errorMessage = error.message || 'An unexpected error occurred.';
+        if (errorMessage.includes('401') || errorMessage.includes('invalid_api_key')) {
+            errorMessage = 'The Grok API Key is invalid. Please update it in Vercel environment variables.';
+        } else if (errorMessage.includes('429')) {
+            errorMessage = 'Rate limit reached. Please wait a moment and try again.';
+        } else if (errorMessage.includes('fetch') || errorMessage.includes('ECONNREFUSED')) {
+            errorMessage = 'Failed to connect to the Grok API. The service might be temporarily unavailable.';
         }
-
-        return res.status(500).json({ 
-            error: errorMessage,
-            details: error.toString() 
-        });
+        return res.status(500).json({ error: errorMessage, details: error.toString() });
     }
 }
