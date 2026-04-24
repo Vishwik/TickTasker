@@ -74,8 +74,21 @@ export default function BreakdownModal({ task, isOpen, onClose }) {
                                     <p className="opacity-80 text-sm font-medium">AI is breaking this down...</p>
                                 </div>
                             ) : error ? (
-                                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm text-center">
-                                    {error}
+                                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm text-center space-y-3">
+                                    <p>{error}</p>
+                                    <button
+                                        onClick={() => {
+                                            setError('');
+                                            setIsGenerating(true);
+                                            AIClient.breakDownTask(task.title, { name: profile?.name, role: profile?.role })
+                                                .then(setSteps)
+                                                .catch(e => setError(e.message))
+                                                .finally(() => setIsGenerating(false));
+                                        }}
+                                        className="text-xs font-bold text-red-400 underline hover:text-red-300 transition-colors"
+                                    >
+                                        Retry
+                                    </button>
                                 </div>
                             ) : steps.length === 0 ? (
                                 <p className="text-[var(--text-primary)] opacity-50 text-center italic">No steps generated.</p>
@@ -135,10 +148,11 @@ export default function BreakdownModal({ task, isOpen, onClose }) {
                             </button>
                             <button
                                 onClick={handleSave}
-                                className="flex-[2] bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/90 text-white text-sm font-bold py-3 rounded-xl shadow-lg shadow-[rgb(var(--color-accent))]/20 transition-all flex items-center justify-center gap-2"
+                                disabled={isGenerating || steps.length === 0}
+                                className="flex-[2] bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/90 text-white text-sm font-bold py-3 rounded-xl shadow-lg shadow-[rgb(var(--color-accent))]/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                <Check size={16} />
-                                Apply Plan
+                                {isGenerating ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
+                                {isGenerating ? 'Generating...' : 'Apply Plan'}
                             </button>
                         </div>
                     </motion.div>

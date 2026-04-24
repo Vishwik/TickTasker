@@ -2,32 +2,63 @@ import { auth } from '../firebase';
 
 const API_URL = '/api/ai';
 
-async function makeAIRequest(action, data, userContext) {
+async function makeAIRequest(action, data, userContext, retryCount = 0) {
     if (!auth.currentUser) {
         throw new Error('User must be logged in to use AI features.');
     }
 
-    const token = await auth.currentUser.getIdToken();
+    // Force refresh the token to prevent 401s during long sessions
+    const token = await auth.currentUser.getIdToken(true);
 
-    const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-            action,
-            data,
-            userContext
-        })
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s timeout
 
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `AI Request Failed with status ${response.status}`);
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+                action,
+                data,
+                userContext
+            }),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            // Check for transient Vercel/Network errors (502, 504)
+            if ((response.status === 502 || response.status === 504) && retryCount < 1) {
+                console.warn(`AI Request failed with ${response.status}. Retrying in 1s...`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return await makeAIRequest(action, data, userContext, retryCount + 1);
+            }
+
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `AI Request Failed with status ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (err) {
+        clearTimeout(timeoutId);
+        
+        // Handle AbortError (Timeout) or Network errors for silent retry
+        if ((err.name === 'AbortError' || err.message.includes('fetch')) && retryCount < 1) {
+             console.warn(`AI Request timed out or network failed. Retrying in 1s...`);
+             await new Promise(resolve => setTimeout(resolve, 1000));
+             return await makeAIRequest(action, data, userContext, retryCount + 1);
+        }
+
+        if (err.name === 'AbortError') {
+            throw new Error("The AI request took too long. Please try again.");
+        }
+        
+        throw err;
     }
-
-    return await response.json();
 }
 
 export const AIClient = {

@@ -1,15 +1,23 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import admin from 'firebase-admin';
 
-// Initialize Firebase Admin securely
+// Set Vercel max duration for this serverless function (in seconds)
+export const maxDuration = 60;
+
+// Initialize Firebase Admin securely (Singleton pattern for Vercel)
 if (!admin.apps.length) {
-    admin.initializeApp({
-        credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/gm, "\n") : undefined,
-        }),
-    });
+    try {
+        admin.initializeApp({
+            credential: admin.credential.cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/gm, "\n") : undefined,
+            }),
+        });
+        console.log("Firebase Admin initialized successfully.");
+    } catch (err) {
+        console.error("Firebase Admin initialization error:", err);
+    }
 }
 
 // Initialize Gemini
