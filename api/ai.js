@@ -160,8 +160,8 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Unknown action' });
         }
 
-        // 4. Call Gemini — use gemini-1.5-flash (stable and widely available)
-        const modelName = 'gemini-1.5-flash';
+        // 4. Call Gemini
+        const modelName = 'gemini-2.5-flash';
         let resultText = '';
         
         if (responseSchema) {
