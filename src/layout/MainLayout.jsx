@@ -307,7 +307,7 @@ export default function Layout({ children, activeTab, setActiveTab }) {
                                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute right-0 mt-3 w-[90vw] md:w-96 bg-[var(--bg-surface)]/95 backdrop-blur-xl border border-[var(--border-base)] rounded-2xl shadow-xl overflow-hidden z-50 ring-1 ring-[var(--border-base)]"
+                                        className="absolute right-0 mt-3 w-80 md:w-96 bg-[var(--bg-surface)] border border-[var(--border-base)] rounded-2xl shadow-2xl overflow-hidden z-[100] ring-1 ring-[var(--border-base)] max-md:fixed max-md:top-[72px] max-md:left-4 max-md:right-4 max-md:w-auto max-md:mt-0"
                                     >
                                         <div className="p-4 border-b border-[var(--border-base)] flex justify-between items-center bg-[var(--text-primary)]/[0.02]">
                                             <h3 className="font-bold text-sm text-[var(--text-primary)] tracking-wide">Notifications</h3>
