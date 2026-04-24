@@ -51,8 +51,8 @@ export default function WeeklyProgress() {
                 </div>
 
                 {/* Ring Chart */}
-                <div className="relative w-24 h-24 flex items-center justify-center">
-                    <svg className="w-full h-full transform -rotate-90">
+                <div className="relative w-24 h-24 flex-shrink-0 flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
                         {/* Track */}
                         <circle
                             cx="48"

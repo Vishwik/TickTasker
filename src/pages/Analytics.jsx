@@ -9,7 +9,7 @@ export default function Analytics() {
 
     const completionValues = [
         { name: 'Completed', value: tasks.filter(t => t.status === 'completed').length, color: '#10b981' }, // Emerald-500
-        { name: 'Pending', value: tasks.filter(t => t.status === 'pending').length, color: 'rgb(var(--color-accent))' }, // Dynamic Theme Color
+        { name: 'Pending', value: tasks.filter(t => t.status === 'pending').length, color: '#6366f1' },    // Indigo-500
     ];
 
     const categories = ['Academic', 'Lab', 'Career', 'Personal'];

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { LayoutDashboard, CheckSquare, BarChart2, FolderKanban, Menu, X, Plus, Bell, Search, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 
 const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }) => {
     return (
@@ -47,10 +48,23 @@ export default function Layout({ children, activeTab, setActiveTab }) {
     const { setIsAddTaskModalOpen, notifications, markAllAsRead, setIsCommandPaletteOpen, isSettingsModalOpen, setIsSettingsModalOpen, setSettingsActiveTab, isPrivacyModalOpen, setIsPrivacyModalOpen, breakdownTask, setBreakdownTask } = useTasks();
     const { profile } = useProfile();
     const [avatarError, setAvatarError] = useState(false);
+    const bellRef = useRef(null);
+    const [bellPos, setBellPos] = useState({ top: 0, right: 0 });
 
     React.useEffect(() => {
         setAvatarError(false);
     }, [profile?.avatar]);
+
+    // Track bell button position for portal positioning
+    useEffect(() => {
+        if (showNotifications && bellRef.current) {
+            const rect = bellRef.current.getBoundingClientRect();
+            setBellPos({
+                top: rect.bottom + window.scrollY + 8,
+                right: window.innerWidth - rect.right,
+            });
+        }
+    }, [showNotifications]);
 
     // Responsive Sidebar Handling
     React.useEffect(() => {
@@ -309,6 +323,7 @@ export default function Layout({ children, activeTab, setActiveTab }) {
 
                         <div className="relative">
                             <button
+                                ref={bellRef}
                                 onClick={() => setShowNotifications(!showNotifications)}
                                 className="p-2 relative hover:bg-[var(--text-primary)]/5 rounded-lg text-[var(--text-primary)] opacity-60 hover:opacity-100 transition-colors"
                             >
@@ -318,14 +333,15 @@ export default function Layout({ children, activeTab, setActiveTab }) {
                                 )}
                             </button>
 
-                            {/* Notifications Dropdown */}
-                            <AnimatePresence>
-                                {showNotifications && (
+                            {/* Notifications Dropdown — rendered as a Portal to escape SVG stacking contexts */}
+                            {showNotifications && createPortal(
+                                <AnimatePresence>
                                     <motion.div
                                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute right-0 mt-3 w-80 md:w-96 bg-[var(--bg-surface)] border border-[var(--border-base)] rounded-2xl shadow-2xl overflow-hidden z-[100] ring-1 ring-[var(--border-base)] max-md:fixed max-md:top-[72px] max-md:left-4 max-md:right-4 max-md:w-auto max-md:mt-0"
+                                        style={{ position: 'fixed', top: bellPos.top, right: bellPos.right, zIndex: 99999 }}
+                                        className="w-80 md:w-96 bg-[var(--bg-surface)] border border-[var(--border-base)] rounded-2xl shadow-2xl overflow-hidden ring-1 ring-[var(--border-base)]"
                                     >
                                         <div className="p-4 border-b border-[var(--border-base)] flex justify-between items-center bg-[var(--text-primary)]/[0.02]">
                                             <h3 className="font-bold text-sm text-[var(--text-primary)] tracking-wide">Notifications</h3>
@@ -454,8 +470,9 @@ export default function Layout({ children, activeTab, setActiveTab }) {
                                             )}
                                         </div>
                                     </motion.div>
-                                )}
-                            </AnimatePresence>
+                                </AnimatePresence>,
+                                document.body
+                            )}
                         </div>
 
                         <button
