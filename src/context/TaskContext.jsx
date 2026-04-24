@@ -194,15 +194,26 @@ export const TaskProvider = ({ children }) => {
         const checkDeadlines = () => {
             const now = new Date();
             tasks.forEach(task => {
-                if (task.status === 'completed' || !task.deadline) return;
+                const deadlineStr = task.deadline || task.deadlineDate;
+                if (task.status === 'completed' || !deadlineStr) return;
                 if (notifiedDeadlineTaskIds.current.has(task.id)) return;
 
-                const diffHours = (new Date(task.deadline) - now) / (1000 * 60 * 60);
+                const [year, month, day] = deadlineStr.split('-').map(Number);
+                const deadline = new Date(year, month - 1, day);
+
+                if (!task.allDay && task.deadlineTime) {
+                    const [hours, minutes] = task.deadlineTime.split(':').map(Number);
+                    deadline.setHours(hours, minutes, 0, 0);
+                } else {
+                    deadline.setHours(23, 59, 59, 999);
+                }
+
+                const diffHours = (deadline - now) / (1000 * 60 * 60);
                 if (diffHours > 0 && diffHours <= 24) {
                     addNotification({ kind: 'deadline', title: 'Approaching Deadline', message: `"${task.title}" is due in ${Math.ceil(diffHours)} hours.`, priority: 'high', context: { parentTaskTitle: task.category } });
                     notifiedDeadlineTaskIds.current.add(task.id);
                 } else if (diffHours < 0) {
-                    addNotification({ kind: 'alert', title: 'Missed Deadline', message: `"${task.title}" was due on ${new Date(task.deadline).toLocaleDateString()}.`, priority: 'critical', context: { parentTaskTitle: task.category } });
+                    addNotification({ kind: 'alert', title: 'Missed Deadline', message: `"${task.title}" was due on ${deadline.toLocaleDateString()}.`, priority: 'critical', context: { parentTaskTitle: task.category } });
                     notifiedDeadlineTaskIds.current.add(task.id);
                 }
             });

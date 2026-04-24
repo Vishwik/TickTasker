@@ -9,11 +9,25 @@
 export const calculatePriorityScore = (task, categoryStats = {}) => {
     const now = new Date();
     const currentHour = now.getHours();
-    const deadline = new Date(task.deadline);
-    deadline.setHours(23, 59, 59, 999);
+    
+    // Parse deadline date safely
+    const deadlineStr = task.deadline || task.deadlineDate;
+    if (!deadlineStr) return 0;
+    
+    const [year, month, day] = deadlineStr.split('-').map(Number);
+    const deadline = new Date(year, month - 1, day);
 
-    const timeDiff = deadline - now;
-    const daysUntilDue = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+    // Precise Time Handling
+    if (!task.allDay && task.deadlineTime) {
+        const [hours, minutes] = task.deadlineTime.split(':').map(Number);
+        deadline.setHours(hours, minutes, 0, 0);
+    } else {
+        deadline.setHours(23, 59, 59, 999);
+    }
+
+    const timeDiffMs = deadline - now;
+    const daysUntilDue = Math.ceil(timeDiffMs / (1000 * 60 * 60 * 24));
+    const hoursUntilDue = Math.floor(timeDiffMs / (1000 * 60 * 60));
 
     let score = 0;
 
@@ -25,8 +39,11 @@ export const calculatePriorityScore = (task, categoryStats = {}) => {
     const importanceWeight = { 'High': 50, 'Medium': 30, 'Low': 10 };
     score += importanceWeight[task.importance] || 10;
 
-    // 3. Deadline Urgency
-    if (daysUntilDue === 0) score += 40;
+    // 3. Deadline Urgency (Precision)
+    if (hoursUntilDue < 0) score += 50; // Overdue hourly boost
+    else if (hoursUntilDue <= 3) score += 45;
+    else if (hoursUntilDue <= 12) score += 35;
+    else if (daysUntilDue === 0) score += 30; // Due today but later
     else if (daysUntilDue <= 2) score += 20;
     else if (daysUntilDue <= 7) score += 10;
 
@@ -61,11 +78,23 @@ export const calculatePriorityScore = (task, categoryStats = {}) => {
 export const getTaskLabel = (task) => {
     const now = new Date();
     const currentHour = now.getHours();
-    const deadline = new Date(task.deadline);
-    deadline.setHours(23, 59, 59, 999);
+    
+    const deadlineStr = task.deadline || task.deadlineDate;
+    if (!deadlineStr) return null;
+
+    const [year, month, day] = deadlineStr.split('-').map(Number);
+    const deadline = new Date(year, month - 1, day);
+
+    if (!task.allDay && task.deadlineTime) {
+        const [hours, minutes] = task.deadlineTime.split(':').map(Number);
+        deadline.setHours(hours, minutes, 0, 0);
+    } else {
+        deadline.setHours(23, 59, 59, 999);
+    }
 
     const timeDiff = deadline - now;
     const daysUntilDue = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+    const hoursUntilDue = Math.floor(timeDiff / (1000 * 60 * 60));
 
     // Time Intelligent Labels
     const duration = task.duration || 0;
@@ -80,7 +109,12 @@ export const getTaskLabel = (task) => {
         return { text: 'Deep Focus 🧠', type: 'recommendation' };
     }
 
-    if (daysUntilDue < 0) return { text: `Overdue by ${Math.abs(daysUntilDue)} days`, type: 'overdue' };
+    if (timeDiff < 0) {
+        if (Math.abs(hoursUntilDue) < 24 && task.deadlineTime) return { text: `Overdue by ${Math.abs(hoursUntilDue)}h`, type: 'overdue' };
+        return { text: `Overdue by ${Math.abs(daysUntilDue)} days`, type: 'overdue' };
+    }
+    
+    if (hoursUntilDue >= 0 && hoursUntilDue <= 3 && task.deadlineTime) return { text: 'Due very soon', type: 'urgent' };
     if (daysUntilDue === 0) return { text: 'Due today', type: 'urgent' };
     if (daysUntilDue === 1) return { text: 'Due tomorrow', type: 'soon' };
     if (daysUntilDue <= 2) return { text: 'Due in 2 days', type: 'soon' };

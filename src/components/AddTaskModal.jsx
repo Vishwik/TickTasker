@@ -20,7 +20,9 @@ export default function AddTaskModal() {
 
     const [newTask, setNewTask] = useState({
         title: '',
-        deadline: '',
+        deadlineDate: '',
+        deadlineTime: '',
+        allDay: true,
         importance: 'Medium',
         category: 'Personal',
         duration: 0 // Minutes
@@ -39,7 +41,9 @@ export default function AddTaskModal() {
             if (taskToEdit) {
                 setNewTask({
                     title: taskToEdit.title,
-                    deadline: taskToEdit.deadline,
+                    deadlineDate: taskToEdit.deadlineDate || taskToEdit.deadline || '',
+                    deadlineTime: taskToEdit.deadlineTime || '',
+                    allDay: taskToEdit.allDay !== false,
                     importance: taskToEdit.importance,
                     category: taskToEdit.category,
                     duration: taskToEdit.duration || 0
@@ -52,7 +56,7 @@ export default function AddTaskModal() {
             setTimeout(() => deadlineInputRef.current?.showPicker ? deadlineInputRef.current?.showPicker() : deadlineInputRef.current?.focus(), 500);
         } else if (isAddTaskModalOpen && !editingTaskId && !newTaskInitialTitle) {
             // Reset if just opening normally
-            setNewTask(prev => ({ ...prev, title: '', deadline: '', importance: 'Medium', category: 'Personal', duration: 0 }));
+            setNewTask(prev => ({ ...prev, title: '', deadlineDate: '', deadlineTime: '', allDay: true, importance: 'Medium', category: 'Personal', duration: 0 }));
         }
     }, [editingTaskId, tasks, isAddTaskModalOpen, newTaskInitialTitle]);
 
@@ -60,12 +64,12 @@ export default function AddTaskModal() {
         setIsAddTaskModalOpen(false);
         setEditingTaskId(null);
         setNewTaskInitialTitle('');
-        setNewTask({ title: '', deadline: '', importance: 'Medium', category: 'Personal', duration: 0 });
+        setNewTask({ title: '', deadlineDate: '', deadlineTime: '', allDay: true, importance: 'Medium', category: 'Personal', duration: 0 });
     };
 
     const handleAddTask = (e) => {
         e.preventDefault();
-        if (!newTask.title || !newTask.deadline) return;
+        if (!newTask.title || !newTask.deadlineDate) return;
 
         if (editingTaskId) {
             editTask(editingTaskId, newTask);
@@ -75,7 +79,7 @@ export default function AddTaskModal() {
         }
 
         setIsAddTaskModalOpen(false);
-        setNewTask({ title: '', deadline: '', importance: 'Medium', category: 'Personal', duration: 0 });
+        setNewTask({ title: '', deadlineDate: '', deadlineTime: '', allDay: true, importance: 'Medium', category: 'Personal', duration: 0 });
     };
 
     const handleAIParsing = async () => {
@@ -87,7 +91,9 @@ export default function AddTaskModal() {
             setNewTask(prev => ({
                 ...prev,
                 title: parsed.title || prev.title,
-                deadline: parsed.deadline || prev.deadline,
+                deadlineDate: parsed.deadlineDate || prev.deadlineDate,
+                deadlineTime: parsed.deadlineTime || prev.deadlineTime,
+                allDay: parsed.allDay !== undefined ? parsed.allDay : prev.allDay,
                 importance: parsed.priority || prev.importance,
                 category: parsed.category || prev.category
             }));
@@ -149,17 +155,34 @@ export default function AddTaskModal() {
                                 {parseError && <p className="text-red-500 text-xs mt-1">{parseError}</p>}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-6">
+                            <div className="flex flex-col gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60 mb-2">Due Date</label>
-                                    <input
-                                        ref={deadlineInputRef}
-                                        type="date"
-                                        required
-                                        value={newTask.deadline}
-                                        onChange={e => setNewTask({ ...newTask, deadline: e.target.value })}
-                                        className="w-full bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))] transition-all appearance-none"
-                                    />
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60">Due Date</label>
+                                        <label className="flex items-center space-x-2 cursor-pointer">
+                                            <input type="checkbox" checked={newTask.allDay} onChange={e => setNewTask({...newTask, allDay: e.target.checked, deadlineTime: e.target.checked ? '' : newTask.deadlineTime})} className="accent-[rgb(var(--color-accent))]" />
+                                            <span className="text-xs text-[var(--text-primary)] opacity-60">All Day</span>
+                                        </label>
+                                    </div>
+                                    <div className="flex gap-4">
+                                        <input
+                                            ref={deadlineInputRef}
+                                            type="date"
+                                            required
+                                            value={newTask.deadlineDate}
+                                            onChange={e => setNewTask({ ...newTask, deadlineDate: e.target.value })}
+                                            className="w-full bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))] transition-all appearance-none"
+                                        />
+                                        {!newTask.allDay && (
+                                            <input
+                                                type="time"
+                                                required={!newTask.allDay}
+                                                value={newTask.deadlineTime}
+                                                onChange={e => setNewTask({ ...newTask, deadlineTime: e.target.value })}
+                                                className="w-full bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))] transition-all appearance-none"
+                                            />
+                                        )}
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60 mb-2">Category</label>

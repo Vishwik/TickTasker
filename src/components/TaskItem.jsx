@@ -18,7 +18,7 @@ export default function TaskItem({ task, isTopPick }) {
         ? Math.round((subtasks.filter(t => t.status === 'completed').length / subtasks.length) * 100)
         : 0;
 
-    const relativeDate = getRelativeDate(task.deadline);
+    const relativeDate = getRelativeDate(task.deadline || task.deadlineDate, task.deadlineTime, task.allDay !== false);
     const label = getTaskLabel(task);
 
     // Priority Signal (Mobile)

@@ -104,9 +104,15 @@ export default async function handler(req, res) {
                 }
             };
         } else if (action === 'parse_task') {
+            // Get local current time string for AI reference
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const dateString = now.toISOString().split('T')[0];
+
             prompt = `
                 Extract task details from this natural language input.
                 ${userCtxStr}
+                System Current Time: ${dateString} ${timeString}
                 Input: "${data.text}"
 
                 Categorization Rules:
@@ -116,9 +122,15 @@ export default async function handler(req, res) {
                 - "Lab": lab record, coding practical, viva prep, experiment
                 If confidence is low, fall back to "Personal".
 
+                Time Parsing Rules:
+                - If the user specifies a time (e.g., "tonight at 8", "3pm"), set 'deadlineTime' to the 24-hour HH:MM format (e.g., "20:00", "15:00") and set 'allDay' to false.
+                - If the user does not specify a time (e.g., "tomorrow", "friday"), leave 'deadlineTime' null and set 'allDay' to true.
+
                 Output strictly as a JSON object with:
                 - title (string: clean, actionable task name)
-                - deadline (string: YYYY-MM-DD format based on today's date ${new Date().toISOString().split('T')[0]}, or null if none)
+                - deadlineDate (string: YYYY-MM-DD format based on today's date ${dateString}, or null if none)
+                - deadlineTime (string: HH:MM 24-hour format, or null if none)
+                - allDay (boolean: true if no specific time is mentioned)
                 - priority (string: 'High', 'Medium', or 'Low')
                 - category (string: inferred category from the list above)
             `;
@@ -126,11 +138,13 @@ export default async function handler(req, res) {
                 type: "object",
                 properties: {
                     title: { type: "string" },
-                    deadline: { type: "string", nullable: true },
+                    deadlineDate: { type: "string", nullable: true },
+                    deadlineTime: { type: "string", nullable: true },
+                    allDay: { type: "boolean" },
                     priority: { type: "string" },
                     category: { type: "string" }
                 },
-                required: ["title", "priority", "category"]
+                required: ["title", "priority", "category", "allDay"]
             };
         } else if (action === 'prioritize') {
              prompt = `
