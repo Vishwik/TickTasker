@@ -5,10 +5,13 @@ import { X, Sparkles, Zap, Target, Download, ShieldCheck, Palette, Moon, Sun, Mo
 import { useProfile } from '../context/ProfileContext';
 
 export default function SettingsModal({ isOpen, onClose }) {
-    const { preferences, togglePreference, tasks, categoryStats, setIsPrivacyModalOpen, theme, updateTheme } = useTasks();
-    const { user, login, logout, syncStatus } = useProfile();
+    const { preferences, togglePreference, tasks, categoryStats, setIsPrivacyModalOpen, theme, updateTheme, syncStatus } = useTasks();
+    const { user, loginWithEmail, signupWithEmail, loginWithGoogle, logout, authLoading } = useProfile();
     const [activeTab, setActiveTab] = useState('appearance'); // 'appearance' | 'labs' | 'profile'
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isSignUp, setIsSignUp] = useState(false);
+    const [authError, setAuthError] = useState('');
 
     const handleDownloadData = () => {
         const data = {
@@ -228,48 +231,98 @@ export default function SettingsModal({ isOpen, onClose }) {
                                         <div className="p-4 bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 rounded-xl mb-6">
                                             <h3 className="text-[rgb(var(--color-accent))] font-bold flex items-center gap-2 mb-1"><Cloud size={16} /> Cloud Sync</h3>
                                             <p className="text-xs text-[var(--text-primary)] opacity-70">
-                                                {user ? 'Your preferences are synced.' : 'Sign in to sync your preferences across devices.'}
+                                                {user ? 'Your data is securely synced to the cloud.' : 'Sign in to sync your tasks and preferences across all devices.'}
                                             </p>
                                         </div>
 
                                         {!user ? (
                                             <div className="space-y-4">
-                                                <div className="space-y-2">
-                                                    <label className="text-sm font-medium text-[var(--text-primary)]">Email Address</label>
-                                                    <input
-                                                        type="email"
-                                                        value={email}
-                                                        onChange={(e) => setEmail(e.target.value)}
-                                                        placeholder="name@example.com"
-                                                        className="w-full px-4 py-3 bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))]"
-                                                    />
+                                                {authError && (
+                                                    <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-xs rounded-xl">
+                                                        {authError}
+                                                    </div>
+                                                )}
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <label className="text-xs font-medium text-[var(--text-primary)] opacity-70 ml-1">Email</label>
+                                                        <input
+                                                            type="email"
+                                                            value={email}
+                                                            onChange={(e) => setEmail(e.target.value)}
+                                                            placeholder="name@example.com"
+                                                            className="w-full mt-1 px-4 py-3 bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))] transition-colors text-sm"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs font-medium text-[var(--text-primary)] opacity-70 ml-1">Password</label>
+                                                        <input
+                                                            type="password"
+                                                            value={password}
+                                                            onChange={(e) => setPassword(e.target.value)}
+                                                            placeholder="••••••••"
+                                                            className="w-full mt-1 px-4 py-3 bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))] transition-colors text-sm"
+                                                        />
+                                                    </div>
                                                 </div>
                                                 <button
-                                                    onClick={() => login(email)}
-                                                    disabled={!email || syncStatus === 'syncing'}
+                                                    onClick={async () => {
+                                                        setAuthError('');
+                                                        try {
+                                                            if (isSignUp) await signupWithEmail(email, password);
+                                                            else await loginWithEmail(email, password);
+                                                        } catch (err) {
+                                                            setAuthError(err.message.replace('Firebase: ', ''));
+                                                        }
+                                                    }}
+                                                    disabled={!email || !password || authLoading}
                                                     className="w-full py-3 bg-[rgb(var(--color-accent))] text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
                                                 >
-                                                    {syncStatus === 'syncing' ? <RefreshCw className="animate-spin w-4 h-4" /> : <User className="w-4 h-4" />}
-                                                    {syncStatus === 'syncing' ? 'Signing in...' : 'Sign In / Register'}
+                                                    {authLoading ? <RefreshCw className="animate-spin w-4 h-4" /> : <User className="w-4 h-4" />}
+                                                    {isSignUp ? 'Create Account' : 'Sign In'}
                                                 </button>
-                                                <p className="text-xs text-[var(--text-primary)] opacity-50 text-center">
-                                                    We use a passwordless mock auth for this demo.
-                                                </p>
+                                                
+                                                <button
+                                                    onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
+                                                    className="w-full py-2 text-xs text-[var(--text-primary)] opacity-60 hover:opacity-100 transition-opacity"
+                                                >
+                                                    {isSignUp ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
+                                                </button>
+
+                                                <div className="relative py-2">
+                                                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[var(--border-base)]"></div></div>
+                                                    <div className="relative flex justify-center"><span className="bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)] opacity-40 uppercase">Or continue with</span></div>
+                                                </div>
+
+                                                <button
+                                                    onClick={async () => {
+                                                        try { await loginWithGoogle(); } catch (err) { setAuthError(err.message); }
+                                                    }}
+                                                    className="w-full py-3 bg-[var(--text-primary)]/5 border border-[var(--border-base)] text-[var(--text-primary)] font-medium rounded-xl hover:bg-[var(--text-primary)]/10 transition-colors flex items-center justify-center gap-3"
+                                                >
+                                                    <svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0124 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 01-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
+                                                    Google
+                                                </button>
                                             </div>
                                         ) : (
                                             <div className="space-y-6">
                                                 <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--text-primary)]/5 border border-[var(--border-base)]">
-                                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-                                                        {user.handle ? user.handle[0].toUpperCase() : 'U'}
-                                                    </div>
+                                                    {user.photoURL ? (
+                                                        <img src={user.photoURL} alt="Profile" className="w-12 h-12 rounded-full border border-[var(--border-base)]" />
+                                                    ) : (
+                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                                                            {user.email ? user.email[0].toUpperCase() : 'U'}
+                                                        </div>
+                                                    )}
                                                     <div className="flex-1">
-                                                        <h4 className="font-bold text-[var(--text-primary)]">{user.email}</h4>
-                                                        <p className="text-xs text-[var(--text-primary)] opacity-60 flex items-center gap-1.5">
-                                                            Status:
-                                                            <span className={`flex items-center gap-1 ${syncStatus === 'synced' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                                                {syncStatus === 'synced' ? 'Synced' : syncStatus}
-                                                            </span>
-                                                        </p>
+                                                        <h4 className="font-bold text-[var(--text-primary)]">{user.displayName || 'TickTasker User'}</h4>
+                                                        <p className="text-xs text-[var(--text-primary)] opacity-60 mb-1">{user.email}</p>
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider">
+                                                            <span className="opacity-50">Sync:</span>
+                                                            {syncStatus === 'synced' && <span className="text-emerald-500 flex items-center gap-1"><Cloud size={10} /> Active</span>}
+                                                            {syncStatus === 'syncing' && <span className="text-blue-500 flex items-center gap-1"><RefreshCw size={10} className="animate-spin" /> Saving</span>}
+                                                            {syncStatus === 'offline' && <span className="text-amber-500">Offline Cache</span>}
+                                                            {syncStatus === 'error' && <span className="text-red-500">Error</span>}
+                                                        </div>
                                                     </div>
                                                 </div>
 

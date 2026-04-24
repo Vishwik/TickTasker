@@ -20,14 +20,13 @@ function App() {
   };
 
   return (
-    <TaskProvider>
-      <ProfileProvider>
+    <ProfileProvider>
+      <TaskProvider>
         <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
           {renderContent()}
         </Layout>
-        <ConflictModal />
-      </ProfileProvider>
-    </TaskProvider>
+      </TaskProvider>
+    </ProfileProvider>
   );
 }
 

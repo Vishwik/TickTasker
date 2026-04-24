@@ -13,6 +13,7 @@
     "clsx": "^2.1.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "firebase": "^12.12.1",
     "framer-motion": "^12.31.1",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
