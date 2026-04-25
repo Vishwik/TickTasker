@@ -297,23 +297,48 @@ export const TaskProvider = ({ children }) => {
         }
     };
 
+    const stripUndefined = (value) => Object.fromEntries(
+        Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined)
+    );
+
     const addSubtasks = async (parentId, newSubtasks) => {
         const parent = tasks.find(t => t.id === parentId);
-        if (!parent) return;
+        if (!parent) {
+            throw new Error('Parent task not found.');
+        }
+        if (!user) {
+            throw new Error('You must be logged in to apply a plan.');
+        }
 
-        const createdTasks = newSubtasks.map(st => ({
-            id: generateUUID(), title: st.title, duration: st.duration, status: 'pending',
-            importance: parent.importance, category: parent.category, deadline: parent.deadline, parentId: parentId
+        const inheritedDeadlineDate = parent.deadlineDate || parent.deadline;
+        const timestamp = new Date().toISOString();
+        const createdTasks = newSubtasks.map(st => stripUndefined({
+            id: generateUUID(),
+            title: st.title?.trim() || 'Untitled step',
+            duration: Number.isFinite(st.duration) ? st.duration : 15,
+            status: 'pending',
+            importance: parent.importance,
+            category: parent.category,
+            deadline: inheritedDeadlineDate,
+            deadlineDate: inheritedDeadlineDate,
+            deadlineTime: parent.deadlineTime || '',
+            allDay: parent.allDay !== false,
+            parentId,
+            updatedAt: timestamp
         }));
         const newChildIds = createdTasks.map(t => t.id);
         const combinedChildIds = [...(parent.childIds || []), ...newChildIds];
 
-        if (user) {
-            const batch = writeBatch(db);
-            createdTasks.forEach(task => batch.set(doc(db, `users/${user.uid}/tasks`, task.id), task));
-            batch.update(doc(db, `users/${user.uid}/tasks`, parentId), { childIds: combinedChildIds, isExpanded: true });
-            await batch.commit();
-        }
+        const batch = writeBatch(db);
+        createdTasks.forEach(task => batch.set(doc(db, `users/${user.uid}/tasks`, task.id), task));
+        batch.update(doc(db, `users/${user.uid}/tasks`, parentId), {
+            childIds: combinedChildIds,
+            isExpanded: true,
+            updatedAt: timestamp
+        });
+        await batch.commit();
+
+        addNotification('Plan Applied', `"${createdTasks.length}" subtasks were added to "${parent.title}".`, 'success');
     };
 
     const toggleTaskExpansion = async (id) => {

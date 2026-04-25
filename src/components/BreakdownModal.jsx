@@ -11,6 +11,7 @@ export default function BreakdownModal({ task, isOpen, onClose }) {
     const [steps, setSteps] = useState([]);
     const [customStep, setCustomStep] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isApplying, setIsApplying] = useState(false);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -29,12 +30,20 @@ export default function BreakdownModal({ task, isOpen, onClose }) {
             };
             fetchSteps();
         }
-    }, [isOpen, task]);
+    }, [isOpen, task, profile?.name, profile?.role]);
 
-    const handleSave = () => {
-        if (steps.length > 0) {
-            addSubtasks(task.id, steps);
+    const handleSave = async () => {
+        if (steps.length === 0 || isApplying) return;
+
+        setError('');
+        setIsApplying(true);
+        try {
+            await addSubtasks(task.id, steps);
             onClose();
+        } catch (err) {
+            setError(err.message || 'Failed to apply the plan.');
+        } finally {
+            setIsApplying(false);
         }
     };
 
@@ -148,11 +157,11 @@ export default function BreakdownModal({ task, isOpen, onClose }) {
                             </button>
                             <button
                                 onClick={handleSave}
-                                disabled={isGenerating || steps.length === 0}
+                                disabled={isGenerating || isApplying || steps.length === 0}
                                 className="flex-[2] bg-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/90 text-white text-sm font-bold py-3 rounded-xl shadow-lg shadow-[rgb(var(--color-accent))]/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {isGenerating ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
-                                {isGenerating ? 'Generating...' : 'Apply Plan'}
+                                {isGenerating || isApplying ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
+                                {isGenerating ? 'Generating...' : isApplying ? 'Applying...' : 'Apply Plan'}
                             </button>
                         </div>
                     </motion.div>
