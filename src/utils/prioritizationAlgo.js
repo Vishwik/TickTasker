@@ -1,3 +1,5 @@
+import { formatOverdueLabel, getExactTargetDate } from './dateUtils';
+
 /**
  * Simulates the "Smart Prioritization" AI feature.
  * Calculates a 'score' based on deadline proximity and importance.
@@ -82,15 +84,7 @@ export const getTaskLabel = (task) => {
     const deadlineStr = task.deadline || task.deadlineDate;
     if (!deadlineStr) return null;
 
-    const [year, month, day] = deadlineStr.split('-').map(Number);
-    const deadline = new Date(year, month - 1, day);
-
-    if (!task.allDay && task.deadlineTime) {
-        const [hours, minutes] = task.deadlineTime.split(':').map(Number);
-        deadline.setHours(hours, minutes, 0, 0);
-    } else {
-        deadline.setHours(23, 59, 59, 999);
-    }
+    const deadline = getExactTargetDate(deadlineStr, task.deadlineTime, task.allDay !== false);
 
     const timeDiff = deadline - now;
     const daysUntilDue = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
@@ -110,8 +104,7 @@ export const getTaskLabel = (task) => {
     }
 
     if (timeDiff < 0) {
-        if (Math.abs(hoursUntilDue) < 24 && task.deadlineTime) return { text: `Overdue by ${Math.abs(hoursUntilDue)}h`, type: 'overdue' };
-        return { text: `Overdue by ${Math.abs(daysUntilDue)} days`, type: 'overdue' };
+        return { text: formatOverdueLabel(deadline, now), type: 'overdue' };
     }
     
     if (hoursUntilDue >= 0 && hoursUntilDue <= 3 && task.deadlineTime) return { text: 'Due very soon', type: 'urgent' };

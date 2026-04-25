@@ -1,3 +1,34 @@
+export const getExactTargetDate = (dateString, timeString = null, allDay = true) => {
+    if (!dateString) return null;
+
+    const [year, month, day] = dateString.split('-').map(Number);
+    const targetDate = new Date(year, month - 1, day);
+
+    if (allDay || !timeString) {
+        targetDate.setHours(23, 59, 59, 999);
+        return targetDate;
+    }
+
+    const [hours, minutes] = timeString.split(':').map(Number);
+    targetDate.setHours(hours, minutes, 0, 0);
+    return targetDate;
+};
+
+export const formatOverdueLabel = (targetDate, now = new Date()) => {
+    if (!targetDate || targetDate >= now) return null;
+
+    const diffMins = Math.round((targetDate - now) / (1000 * 60));
+    const absMins = Math.abs(diffMins);
+
+    if (absMins < 60) return `Overdue by ${absMins}m`;
+
+    const absHours = Math.floor(absMins / 60);
+    if (absHours < 24) return `Overdue by ${absHours}h`;
+
+    const diffDays = Math.ceil((targetDate - now) / (1000 * 60 * 60 * 24));
+    return `Overdue by ${Math.abs(diffDays)} days`;
+};
+
 export const getRelativeDate = (dateString, timeString = null, allDay = true) => {
     if (!dateString) return null;
 
@@ -24,8 +55,7 @@ export const getRelativeDate = (dateString, timeString = null, allDay = true) =>
     }
 
     // Precise Time mode
-    const [hours, minutes] = timeString.split(':').map(Number);
-    const exactTarget = new Date(year, month - 1, day, hours, minutes);
+    const exactTarget = getExactTargetDate(dateString, timeString, allDay);
     
     const diffMs = exactTarget - now;
     const diffMins = Math.round(diffMs / (1000 * 60));
@@ -35,11 +65,7 @@ export const getRelativeDate = (dateString, timeString = null, allDay = true) =>
     const timeFormatted = exactTarget.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
     if (diffMs < 0) {
-        const absMins = Math.abs(diffMins);
-        if (absMins < 60) return `Overdue by ${absMins}m`;
-        const absHours = Math.floor(absMins / 60);
-        if (absHours < 24) return `Overdue by ${absHours}h`;
-        return 'Overdue';
+        return formatOverdueLabel(exactTarget, now);
     }
 
     if (diffMins < 60) return `In ${diffMins}m`;
