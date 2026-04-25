@@ -100,7 +100,7 @@ function normalizeBreakdownSteps(rawSteps, taskTitle) {
     const fallbackCategory = inferBreakdownCategory(taskTitle);
 
     return rawSteps
-        .map((step, index) => {
+        .map((step) => {
             const title = typeof step === 'string' ? step.trim() : String(step?.title || '').trim();
             if (!title) return null;
 
@@ -108,12 +108,9 @@ function normalizeBreakdownSteps(rawSteps, taskTitle) {
                 title,
                 duration: parseDurationMinutes(step?.duration, 30),
                 category: step?.category || fallbackCategory,
-                order: index,
             };
         })
-        .filter(Boolean)
-        .sort((a, b) => a.order - b.order)
-        .map(({ order, ...step }) => step);
+        .filter(Boolean);
 }
 
 function getNextWeekdayDate(weekdayName) {
@@ -572,7 +569,7 @@ export default async function handler(req, res) {
         const idToken = authHeader.split('Bearer ')[1];
         try {
             await admin.auth().verifyIdToken(idToken);
-        } catch (error) {
+        } catch {
             return res.status(401).json({ error: 'Unauthorized: Invalid token' });
         }
 
@@ -695,8 +692,6 @@ Today is ${dateString}, current time is ${timeString}.`
             errorMessage = 'The AI API key is invalid. Please update GEMINI_API_KEY or GROK_API_KEY in Vercel environment variables.';
         } else if (errorMessage.includes('Gemini API error')) {
             errorMessage = 'Gemini returned an error and the fallback could not complete the request.';
-        } else if (errorMessage.includes('429')) {
-            errorMessage = 'Rate limit reached. Please wait a moment and try again.';
         } else if (errorMessage.includes('fetch') || errorMessage.includes('ECONNREFUSED')) {
             errorMessage = 'Failed to connect to the AI provider. The service might be temporarily unavailable.';
         }
