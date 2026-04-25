@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Edit2, Trash2, CheckCircle2, ChevronDown, CornerDownRight, Sparkles } from 'lucide-react';
+import { Edit2, Trash2, CheckCircle2, Sparkles, Clock3, FolderOpen } from 'lucide-react';
 import { getTaskLabel } from '../utils/prioritizationAlgo';
-import { getRelativeDate } from '../utils/dateUtils';
+import { formatTaskDeadline, getRelativeDate, getTaskDeadlineDateString } from '../utils/dateUtils';
 import { useTasks } from '../context/TaskContext';
 
 export default function TaskItem({ task, isTopPick }) {
-    const { updateTaskStatus, deleteTask, toggleTaskExpansion, setEditingTaskId, setIsAddTaskModalOpen, setBreakdownTask, tasks } = useTasks();
+    const { updateTaskStatus, deleteTask, setEditingTaskId, setIsAddTaskModalOpen, setBreakdownTask, tasks } = useTasks();
     const [isMobileExpanded, setIsMobileExpanded] = useState(false);
 
-    // Resolve Subtasks
     const subtasks = task.childIds
         ? task.childIds.map(id => tasks.find(t => t.id === id)).filter(Boolean)
         : [];
@@ -18,16 +17,21 @@ export default function TaskItem({ task, isTopPick }) {
         ? Math.round((subtasks.filter(t => t.status === 'completed').length / subtasks.length) * 100)
         : 0;
 
-    const relativeDate = getRelativeDate(task.deadline || task.deadlineDate, task.deadlineTime, task.allDay !== false);
+    const deadlineDate = getTaskDeadlineDateString(task);
+    const relativeDate = getRelativeDate(deadlineDate, task.deadlineTime, task.allDay !== false);
+    const deadlineLabel = formatTaskDeadline(deadlineDate, task.deadlineTime, task.allDay !== false);
     const label = getTaskLabel(task);
 
-    // Priority Signal (Mobile)
+    const durationLabel = task.duration >= 60
+        ? `${Math.floor(task.duration / 60)}h${task.duration % 60 > 0 ? ` ${task.duration % 60}m` : ''}`
+        : `${task.duration}m`;
+
     const priorityConfig = {
-        'High': { color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
-        'Medium': { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-        'Low': { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }
+        High: { color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-rose-500/20' },
+        Medium: { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+        Low: { color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' }
     };
-    const pConfig = priorityConfig[task.importance] || priorityConfig['Medium'];
+    const pConfig = priorityConfig[task.importance] || priorityConfig.Medium;
 
     const handleEditClick = (e) => {
         e.stopPropagation();
@@ -46,7 +50,6 @@ export default function TaskItem({ task, isTopPick }) {
     };
 
     const handleCardClick = () => {
-        // Toggle details on tap
         setIsMobileExpanded(!isMobileExpanded);
     };
 
@@ -56,7 +59,7 @@ export default function TaskItem({ task, isTopPick }) {
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="mb-4" // Vertical spacing between cards
+            className="mb-4"
         >
             <div
                 onClick={handleCardClick}
@@ -69,12 +72,11 @@ export default function TaskItem({ task, isTopPick }) {
                     ${task.status === 'completed' ? 'opacity-50 grayscale-[0.5]' : ''}
                 `}
             >
-                {/* 1. TOP ROW: Title & Checkbox */}
                 <div className="flex items-start justify-between gap-4">
                     <h3 className={`font-bold text-[var(--text-primary)] leading-snug break-words pr-2 transition-all ${isTopPick ? 'text-lg md:text-xl' : 'text-base md:text-lg'} ${task.status === 'completed' ? 'line-through opacity-70' : ''}`}>
                         {task.title}
                     </h3>
-                    
+
                     <button
                         onClick={handleToggleStatus}
                         className={`flex-shrink-0 w-6 h-6 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-300 ${task.status === 'completed'
@@ -86,29 +88,24 @@ export default function TaskItem({ task, isTopPick }) {
                     </button>
                 </div>
 
-                {/* 2. SECOND ROW: Signals (Priority + Time) */}
                 <div className="flex items-center gap-2 mt-3">
-                    {/* Priority Badge */}
                     <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${pConfig.color} ${pConfig.bg}`}>
                         {task.importance}
                     </span>
 
-                    {/* Relative Time Badge */}
                     {relativeDate && (
                         <span className={`text-[10px] font-medium px-2.5 py-1 rounded-full border border-[var(--border-base)] text-[var(--text-primary)] opacity-70 ${relativeDate === 'Overdue' ? 'text-rose-500 border-rose-500/30 bg-rose-500/5' : ''}`}>
                             {relativeDate}
                         </span>
                     )}
 
-                     {/* Focus Badge (Only for Top Pick) */}
-                     {isTopPick && (
+                    {isTopPick && (
                         <span className="hidden md:inline-block text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest bg-gradient-to-r from-violet-500/80 to-fuchsia-500/80 text-white shadow-lg shadow-purple-500/10">
                             Focus Now
                         </span>
                     )}
                 </div>
 
-                {/* 3. EXPANDABLE DETAILS (Hidden by default, shown on tap/click) */}
                 <AnimatePresence>
                     {(isMobileExpanded || task.isExpanded) && (
                         <motion.div
@@ -121,14 +118,20 @@ export default function TaskItem({ task, isTopPick }) {
                                 <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--text-primary)] opacity-60">
                                     {task.duration > 0 && (
                                         <div className="flex items-center">
-                                            <span className="mr-1.5">⏱️</span>
-                                            {task.duration}m
+                                            <Clock3 size={12} className="mr-1.5" />
+                                            {durationLabel}
                                         </div>
                                     )}
                                     <div className="flex items-center">
-                                        <span className="mr-1.5">📂</span>
+                                        <FolderOpen size={12} className="mr-1.5" />
                                         {task.category}
                                     </div>
+                                    {deadlineDate && (
+                                        <div className="flex items-center">
+                                            <Clock3 size={12} className="mr-1.5" />
+                                            {deadlineLabel}
+                                        </div>
+                                    )}
                                     {label && label.type !== 'urgent' && label.type !== 'soon' && label.type !== 'high' && (
                                         <div className="flex items-center text-[rgb(var(--color-accent))]">
                                             <Sparkles size={12} className="mr-1" />
@@ -137,7 +140,6 @@ export default function TaskItem({ task, isTopPick }) {
                                     )}
                                 </div>
 
-                                {/* Actions */}
                                 <div className="flex items-center gap-2">
                                     <button onClick={handleEditClick} className="px-3 py-1.5 bg-[var(--text-primary)]/5 rounded-lg text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--text-primary)]/10 transition-colors flex items-center gap-1.5">
                                         <Edit2 size={12} /> Edit
@@ -145,7 +147,7 @@ export default function TaskItem({ task, isTopPick }) {
                                     <button onClick={handleDeleteClick} className="px-3 py-1.5 bg-red-500/5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors flex items-center gap-1.5">
                                         <Trash2 size={12} /> Delete
                                     </button>
-                                    
+
                                     {(task.duration >= 60 || task.importance === 'High') && task.status !== 'completed' && subtasks.length === 0 && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setBreakdownTask(task); }}
@@ -155,8 +157,7 @@ export default function TaskItem({ task, isTopPick }) {
                                         </button>
                                     )}
                                 </div>
-                                
-                                {/* Subtasks List */}
+
                                 {subtasks.length > 0 && (
                                     <div className="mt-2 space-y-1">
                                         <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-primary)] opacity-40 mb-2">Subtasks</div>
@@ -177,9 +178,8 @@ export default function TaskItem({ task, isTopPick }) {
                         </motion.div>
                     )}
                 </AnimatePresence>
-                
-                 {/* Subtask Indicator (If collapsed but has subtasks) */}
-                 {subtasks.length > 0 && !isMobileExpanded && !task.isExpanded && (
+
+                {subtasks.length > 0 && !isMobileExpanded && !task.isExpanded && (
                     <div className="mt-3 flex items-center gap-2">
                         <div className="h-1 w-24 bg-[var(--text-primary)]/5 rounded-full overflow-hidden">
                             <div className="h-full bg-[rgb(var(--color-accent))]" style={{ width: `${progress}%` }} />

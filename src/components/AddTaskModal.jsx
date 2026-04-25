@@ -25,16 +25,15 @@ export default function AddTaskModal() {
         allDay: true,
         importance: 'Medium',
         category: 'Personal',
-        duration: 0 // Minutes
+        duration: 0
     });
-    
+
     const { profile } = useProfile();
     const [isParsing, setIsParsing] = useState(false);
     const [parseError, setParseError] = useState('');
 
     const deadlineInputRef = React.useRef(null);
 
-    // Populate form when editing or creating with context
     useEffect(() => {
         if (editingTaskId) {
             const taskToEdit = tasks.find(t => t.id === editingTaskId);
@@ -50,13 +49,18 @@ export default function AddTaskModal() {
                 });
             }
         } else if (isAddTaskModalOpen && newTaskInitialTitle) {
-            // New Task with Pre-filled Title (from Command Palette)
             setNewTask(prev => ({ ...prev, title: newTaskInitialTitle }));
-            // Focus deadline input since title is done
             setTimeout(() => deadlineInputRef.current?.showPicker ? deadlineInputRef.current?.showPicker() : deadlineInputRef.current?.focus(), 500);
         } else if (isAddTaskModalOpen && !editingTaskId && !newTaskInitialTitle) {
-            // Reset if just opening normally
-            setNewTask(prev => ({ ...prev, title: '', deadlineDate: '', deadlineTime: '', allDay: true, importance: 'Medium', category: 'Personal', duration: 0 }));
+            setNewTask({
+                title: '',
+                deadlineDate: '',
+                deadlineTime: '',
+                allDay: true,
+                importance: 'Medium',
+                category: 'Personal',
+                duration: 0
+            });
         }
     }, [editingTaskId, tasks, isAddTaskModalOpen, newTaskInitialTitle]);
 
@@ -64,7 +68,15 @@ export default function AddTaskModal() {
         setIsAddTaskModalOpen(false);
         setEditingTaskId(null);
         setNewTaskInitialTitle('');
-        setNewTask({ title: '', deadlineDate: '', deadlineTime: '', allDay: true, importance: 'Medium', category: 'Personal', duration: 0 });
+        setNewTask({
+            title: '',
+            deadlineDate: '',
+            deadlineTime: '',
+            allDay: true,
+            importance: 'Medium',
+            category: 'Personal',
+            duration: 0
+        });
     };
 
     const handleAddTask = (e) => {
@@ -79,13 +91,22 @@ export default function AddTaskModal() {
         }
 
         setIsAddTaskModalOpen(false);
-        setNewTask({ title: '', deadlineDate: '', deadlineTime: '', allDay: true, importance: 'Medium', category: 'Personal', duration: 0 });
+        setNewTask({
+            title: '',
+            deadlineDate: '',
+            deadlineTime: '',
+            allDay: true,
+            importance: 'Medium',
+            category: 'Personal',
+            duration: 0
+        });
     };
 
     const handleAIParsing = async () => {
         if (!newTask.title) return;
         setIsParsing(true);
         setParseError('');
+
         try {
             const parsed = await AIClient.parseTask(newTask.title, { name: profile?.name, role: profile?.role });
             setNewTask(prev => ({
@@ -94,6 +115,7 @@ export default function AddTaskModal() {
                 deadlineDate: parsed.deadlineDate || prev.deadlineDate,
                 deadlineTime: parsed.deadlineTime || prev.deadlineTime,
                 allDay: parsed.allDay !== undefined ? parsed.allDay : prev.allDay,
+                duration: Number.isFinite(parsed.duration) && parsed.duration > 0 ? parsed.duration : prev.duration,
                 importance: parsed.priority || prev.importance,
                 category: parsed.category || prev.category
             }));
@@ -124,15 +146,15 @@ export default function AddTaskModal() {
                     >
                         <div className="p-6 border-b border-[var(--border-base)] flex justify-between items-center bg-[var(--text-primary)]/5">
                             <h2 className="text-xl font-bold text-[var(--text-primary)]">{editingTaskId ? 'Edit Task' : 'Create New Task'}</h2>
-                            <button onClick={handleCloseModal} className="text-[var(--text-primary)] opacity-60 hover:opacity-100 transition-opacity">✕</button>
+                            <button onClick={handleCloseModal} className="text-[var(--text-primary)] opacity-60 hover:opacity-100 transition-opacity" aria-label="Close modal">X</button>
                         </div>
 
                         <form onSubmit={handleAddTask} className="p-8 space-y-6">
                             <div>
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60">What needs to be done?</label>
-                                    <button 
-                                        type="button" 
+                                    <button
+                                        type="button"
                                         onClick={handleAIParsing}
                                         disabled={!newTask.title || isParsing}
                                         className="text-xs font-bold text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10 hover:bg-[rgb(var(--color-accent))]/20 px-2 py-1 rounded flex items-center gap-1 disabled:opacity-50 transition-colors"
@@ -148,7 +170,7 @@ export default function AddTaskModal() {
                                     onChange={e => setNewTask({ ...newTask, title: e.target.value })}
                                     className="w-full bg-[var(--text-primary)]/5 border border-[var(--border-base)] rounded-xl px-5 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[rgb(var(--color-accent))] focus:ring-1 focus:ring-[rgb(var(--color-accent))] transition-all placeholder-[var(--text-primary)]/30"
                                     placeholder="e.g. Finish Machine Learning Report by tomorrow 5pm"
-                                    autoFocus={!newTaskInitialTitle} // Only autofocus if not pre-filled
+                                    autoFocus={!newTaskInitialTitle}
                                     onInvalid={e => e.target.setCustomValidity('Please name your task to continue.')}
                                     onInput={e => e.target.setCustomValidity('')}
                                 />
@@ -160,7 +182,7 @@ export default function AddTaskModal() {
                                     <div className="flex items-center justify-between mb-2">
                                         <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60">Due Date</label>
                                         <label className="flex items-center space-x-2 cursor-pointer">
-                                            <input type="checkbox" checked={newTask.allDay} onChange={e => setNewTask({...newTask, allDay: e.target.checked, deadlineTime: e.target.checked ? '' : newTask.deadlineTime})} className="accent-[rgb(var(--color-accent))]" />
+                                            <input type="checkbox" checked={newTask.allDay} onChange={e => setNewTask({ ...newTask, allDay: e.target.checked, deadlineTime: e.target.checked ? '' : newTask.deadlineTime })} className="accent-[rgb(var(--color-accent))]" />
                                             <span className="text-xs text-[var(--text-primary)] opacity-60">All Day</span>
                                         </label>
                                     </div>
@@ -202,7 +224,6 @@ export default function AddTaskModal() {
                                 </div>
                             </div>
 
-                            {/* Duration Selector */}
                             <div>
                                 <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60 mb-2">Estimated Time (Optional)</label>
                                 <div className="flex flex-wrap gap-2">
@@ -222,8 +243,6 @@ export default function AddTaskModal() {
                                 </div>
                             </div>
 
-
-                            {/* Priority Level */}
                             <div>
                                 <label className="block text-sm font-medium text-[var(--text-primary)] opacity-60 mb-2">Priority Level</label>
                                 <div className="grid grid-cols-3 gap-3">

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { sortTasksBySmartPriority } from '../utils/prioritizationAlgo';
 import { DEFAULT_MODEL, predictScore, trainModel, extractFeatures } from '../utils/AIEngine';
+import { getTaskDeadlineDateString } from '../utils/dateUtils';
 import { useProfile } from './ProfileContext';
 import { db } from '../firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, updateDoc, writeBatch, getDoc } from 'firebase/firestore';
@@ -134,9 +135,10 @@ export const TaskProvider = ({ children }) => {
         return sortedTasks.filter(task => {
             if (filterState.status !== 'all' && task.status !== filterState.status) return false;
             if (filterState.timeFrame) {
-                if (!task.deadline) return false;
+                const deadlineDate = getTaskDeadlineDateString(task);
+                if (!deadlineDate) return false;
                 const today = new Date(); today.setHours(0, 0, 0, 0);
-                const taskDate = new Date(task.deadline); taskDate.setHours(0, 0, 0, 0);
+                const taskDate = new Date(deadlineDate); taskDate.setHours(0, 0, 0, 0);
                 const diffDays = Math.ceil((taskDate - today) / (1000 * 60 * 60 * 24));
 
                 if (filterState.timeFrame === 'today' && diffDays !== 0) return false;
@@ -268,13 +270,21 @@ export const TaskProvider = ({ children }) => {
         const oldTask = tasks.find(t => t.id === id);
         if (!oldTask) return;
 
-        if (updatedFields.deadline && oldTask.deadline && new Date(updatedFields.deadline) > new Date(oldTask.deadline)) {
+        const previousDeadline = getTaskDeadlineDateString(oldTask);
+        const nextDeadline = updatedFields.deadlineDate || updatedFields.deadline || previousDeadline;
+
+        if (nextDeadline && previousDeadline && new Date(nextDeadline) > new Date(previousDeadline)) {
             addNotification({ kind: 'ai_priority', title: 'Smart Schedule Alert', message: 'Frequent delays detected. Prioritizing this task.', priority: 'normal', context: { parentTaskTitle: 'AI Analysis' } });
             setAiModel(model => trainModel({ features: extractFeatures(oldTask, categoryStats), target: 0.0 }, model));
         }
         addNotification(`Task Updated`, `"${oldTask.title}" has been updated.`, 'info');
 
-        const finalUpdate = { ...updatedFields, updatedAt: new Date().toISOString() };
+        const normalizedDeadline = updatedFields.deadlineDate || updatedFields.deadline;
+        const finalUpdate = {
+            ...updatedFields,
+            ...(normalizedDeadline ? { deadline: normalizedDeadline, deadlineDate: normalizedDeadline } : {}),
+            updatedAt: new Date().toISOString()
+        };
         if (user) {
             await updateDoc(doc(db, `users/${user.uid}/tasks`, id), finalUpdate);
         }

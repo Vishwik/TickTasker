@@ -217,6 +217,25 @@ function extractTimeInfo(text = '') {
     return { deadlineTime: null, allDay: true };
 }
 
+function extractDurationInfo(text = '') {
+    const normalized = String(text).toLowerCase();
+    const combinedMatch = normalized.match(
+        /\b(?:for\s+)?(?:(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours))(?:\s*(\d+)\s*(?:m|min|mins|minute|minutes))?\b/
+    );
+    const minutesOnlyMatch = normalized.match(/\b(?:for\s+)?(\d+)\s*(?:m|min|mins|minute|minutes)\b/);
+
+    let duration = 0;
+    if (combinedMatch) {
+        const hoursValue = parseFloat(combinedMatch[1] || 0);
+        const minutesValue = parseInt(combinedMatch[2] || 0, 10);
+        duration = Math.round((hoursValue * 60) + minutesValue);
+    } else if (minutesOnlyMatch) {
+        duration = parseInt(minutesOnlyMatch[1], 10);
+    }
+
+    return duration > 0 ? duration : 0;
+}
+
 function inferPriority(text = '') {
     const normalized = String(text).toLowerCase();
 
@@ -333,6 +352,7 @@ function fallbackParseTask(text) {
         deadlineDate: formatDateYmd(date),
         deadlineTime: time.deadlineTime,
         allDay: time.allDay,
+        duration: extractDurationInfo(text),
         priority: inferPriority(text),
         category: inferTaskCategory(text),
     };
@@ -348,6 +368,7 @@ function normalizeParsedTask(parsed, originalText) {
         deadlineDate: parsed?.deadlineDate || fallback.deadlineDate || null,
         deadlineTime: parsed?.deadlineTime || fallback.deadlineTime || null,
         allDay: typeof parsed?.allDay === 'boolean' ? parsed.allDay : ((parsed?.deadlineTime || fallback.deadlineTime) ? false : fallback.allDay),
+        duration: Number.isFinite(parsed?.duration) && parsed.duration > 0 ? parsed.duration : fallback.duration,
         priority,
         category,
     };
@@ -615,6 +636,7 @@ Output a JSON object with these exact fields:
 - deadlineDate (string: YYYY-MM-DD or null)
 - deadlineTime (string: HH:MM 24h format or null)
 - allDay (boolean: true if no specific time mentioned)
+- duration (number: estimated minutes, use 0 if not mentioned)
 - priority (string: "High", "Medium", or "Low")
 - category (string: one of Academic, Personal, Career, Lab)
 

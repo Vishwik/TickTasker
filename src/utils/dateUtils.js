@@ -14,6 +14,31 @@ export const getExactTargetDate = (dateString, timeString = null, allDay = true)
     return targetDate;
 };
 
+export const getTaskDeadlineDateString = (task) => task?.deadlineDate || task?.deadline || null;
+
+export const formatTaskDeadline = (dateString, timeString = null, allDay = true) => {
+    if (!dateString) return 'No deadline';
+
+    const targetDate = getExactTargetDate(dateString, timeString, allDay);
+    if (!targetDate) return 'No deadline';
+
+    const dateLabel = targetDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+    });
+
+    if (allDay || !timeString) {
+        return dateLabel;
+    }
+
+    const timeLabel = targetDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+
+    return `${dateLabel}, ${timeLabel}`;
+};
+
 export const formatOverdueLabel = (targetDate, now = new Date()) => {
     if (!targetDate || targetDate >= now) return null;
 

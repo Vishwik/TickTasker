@@ -3,9 +3,9 @@ import { useTasks } from '../context/TaskContext';
 import Card from '../components/Card';
 import FocusFlow from '../components/FocusFlow';
 import WeeklyProgress from '../components/WeeklyProgress';
-import { ArrowUpRight, CheckCircle2, AlertCircle, Clock, Zap, Settings, Sparkles, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, Check, CheckCircle2, AlertCircle, Clock, Copy, Zap, Sparkles, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { getRelativeDate } from '../utils/dateUtils';
+import { formatTaskDeadline, getRelativeDate, getTaskDeadlineDateString } from '../utils/dateUtils';
 import { AIClient } from '../utils/aiClient';
 import { useProfile } from '../context/ProfileContext';
 
@@ -34,20 +34,50 @@ export default function Dashboard() {
     const [aiPlan, setAiPlan] = useState('');
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
     const [aiError, setAiError] = useState('');
+    const [aiPlanMeta, setAiPlanMeta] = useState({ generatedAt: null, taskCount: 0 });
+    const [copiedPlan, setCopiedPlan] = useState(false);
 
     const generateAIPlan = async () => {
         setIsGeneratingPlan(true);
         setAiError('');
+
         try {
-            const pendingTasks = tasks.filter(t => t.status === 'pending');
+            const pendingTasks = tasks.filter(t => t.status === 'pending' && !t.parentId);
+
+            if (!pendingTasks.length) {
+                setAiPlan('Your list is clear right now. Use this time to recharge, capture a new idea, or review what is coming up next.');
+                setAiPlanMeta({ generatedAt: new Date().toISOString(), taskCount: 0 });
+                setCopiedPlan(false);
+                return;
+            }
+
             const plan = await AIClient.generateDailyPlan(pendingTasks, { name: profile?.name, role: profile?.role });
             setAiPlan(plan);
+            setAiPlanMeta({ generatedAt: new Date().toISOString(), taskCount: pendingTasks.length });
+            setCopiedPlan(false);
         } catch (err) {
             setAiError(err.message);
         } finally {
             setIsGeneratingPlan(false);
         }
     };
+
+    const handleCopyPlan = async () => {
+        if (!aiPlan || !navigator?.clipboard?.writeText) return;
+
+        try {
+            await navigator.clipboard.writeText(aiPlan);
+            setAiError('');
+            setCopiedPlan(true);
+            setTimeout(() => setCopiedPlan(false), 1800);
+        } catch {
+            setAiError('Could not copy the plan to your clipboard.');
+        }
+    };
+
+    const planGeneratedLabel = aiPlanMeta.generatedAt
+        ? new Date(aiPlanMeta.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        : null;
 
     const highPriorityTasks = sortedTasks.filter(t => t.status === 'pending').slice(0, 4);
     const completedRate = getCompletionRate();
@@ -63,7 +93,7 @@ export default function Dashboard() {
                 className="flex flex-col md:flex-row md:items-end justify-between pb-6 border-b border-[var(--border-base)]"
             >
                 <div>
-                    <h1 className="text-4xl font-extrabold text-[var(--text-primary)] mb-2">Welcome back 👋</h1>
+                    <h1 className="text-4xl font-extrabold text-[var(--text-primary)] mb-2">Welcome back</h1>
                     <p className="text-[var(--text-primary)] opacity-60 text-lg">You have <span className="text-[rgb(var(--color-accent))] font-bold">{pendingCount} pending tasks</span>. Here is your smart priority list.</p>
                 </div>
                 <button
@@ -97,7 +127,7 @@ export default function Dashboard() {
                         <p className="text-sm text-[var(--text-primary)] opacity-70 mb-4">
                             Let TickTasker Intelligence analyze your tasks, deadlines, and priorities to generate an optimized action plan for today.
                         </p>
-                        
+
                         {aiError && (
                             <div className="text-red-400 text-xs bg-red-500/10 p-2 rounded border border-red-500/20 mb-4 inline-block">
                                 Error: {aiError}
@@ -105,10 +135,35 @@ export default function Dashboard() {
                         )}
 
                         {aiPlan ? (
-                            <div className="bg-[var(--bg-base)]/50 backdrop-blur-sm border border-[var(--border-base)] rounded-xl p-5 text-sm text-[var(--text-primary)] leading-relaxed prose prose-invert">
-                                {aiPlan.split('\\n').map((line, i) => (
-                                    <p key={i} className="mb-2 last:mb-0">{line}</p>
-                                ))}
+                            <div className="space-y-4">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                    <div className="text-xs text-[var(--text-primary)] opacity-60">
+                                        Based on {aiPlanMeta.taskCount} pending task{aiPlanMeta.taskCount === 1 ? '' : 's'}
+                                        {planGeneratedLabel ? ` | Updated ${planGeneratedLabel}` : ''}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={handleCopyPlan}
+                                            className="px-3 py-2 bg-[var(--bg-base)]/70 hover:bg-[var(--text-primary)]/10 border border-[var(--border-base)] rounded-xl text-xs font-medium text-[var(--text-primary)] transition-all flex items-center gap-2"
+                                        >
+                                            {copiedPlan ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                                            {copiedPlan ? 'Copied' : 'Copy Plan'}
+                                        </button>
+                                        <button
+                                            onClick={generateAIPlan}
+                                            disabled={isGeneratingPlan}
+                                            className="px-3 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                            <RefreshCw className={isGeneratingPlan ? 'animate-spin' : ''} size={14} />
+                                            {isGeneratingPlan ? 'Refreshing...' : 'Regenerate'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="bg-[var(--bg-base)]/50 backdrop-blur-sm border border-[var(--border-base)] rounded-xl p-5 text-sm text-[var(--text-primary)] leading-relaxed prose prose-invert">
+                                    {aiPlan.split(/\n+/).filter(Boolean).map((line, i) => (
+                                        <p key={i} className="mb-2 last:mb-0">{line}</p>
+                                    ))}
+                                </div>
                             </div>
                         ) : (
                             <button
@@ -173,7 +228,10 @@ export default function Dashboard() {
 
                 <div className="grid gap-5">
                     {highPriorityTasks.map((task, index) => {
-                        const relativeDate = getRelativeDate(task.deadline);
+                        const deadlineDate = getTaskDeadlineDateString(task);
+                        const relativeDate = getRelativeDate(deadlineDate, task.deadlineTime, task.allDay !== false);
+                        const deadlineLabel = formatTaskDeadline(deadlineDate, task.deadlineTime, task.allDay !== false);
+
                         return (
                             <motion.div
                                 key={task.id}
@@ -207,7 +265,7 @@ export default function Dashboard() {
                                                 </span>
                                                 <span className="flex items-center hover:text-[var(--text-primary)] transition-colors">
                                                     <Clock size={12} className="mr-1.5 opacity-70" />
-                                                    Due {task.deadline}
+                                                    Due {deadlineLabel}
                                                     {relativeDate && (
                                                         <span className={`ml-1 font-medium ${relativeDate === 'Overdue' ? 'text-rose-500' : 'opacity-60'}`}>
                                                             ({relativeDate})

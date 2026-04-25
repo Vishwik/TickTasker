@@ -36,7 +36,25 @@ const normalize = (val, min, max) => {
  */
 export const extractFeatures = (task, categoryStats = {}) => {
     const now = new Date();
-    const deadline = new Date(task.deadline);
+    const deadlineDate = task.deadlineDate || task.deadline;
+
+    // Tasks without deadlines can still be ranked by other signals.
+    if (!deadlineDate) {
+        const duration = task.duration || 0;
+        const categoryScore = Math.min((categoryStats[task.category] || 0) / 50, 1.0);
+        const impMap = { 'High': 1.0, 'Medium': 0.5, 'Low': 0.2 };
+
+        return {
+            w_urgency: 0,
+            w_importance: impMap[task.importance] || 0.2,
+            w_overdue: 0,
+            w_category: categoryScore,
+            w_quick_win: (duration > 0 && duration <= 15) ? 1.0 : 0.0,
+            w_deep_work: (duration >= 60) ? 1.0 : 0.0
+        };
+    }
+
+    const deadline = new Date(deadlineDate);
     deadline.setHours(23, 59, 59, 999);
 
     // Feature 1: Urgency

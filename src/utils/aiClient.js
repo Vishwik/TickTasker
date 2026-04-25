@@ -94,8 +94,12 @@ export const AIClient = {
             id: t.id,
             title: t.title,
             deadline: t.deadline,
+            deadlineDate: t.deadlineDate,
+            deadlineTime: t.deadlineTime,
+            allDay: t.allDay,
             importance: t.importance,
-            category: t.category
+            category: t.category,
+            duration: t.duration
         }));
         
         return makeAIRequest('prioritize', { tasks: lightweightTasks }, userContext);
@@ -111,7 +115,11 @@ export const AIClient = {
         const lightweightTasks = pendingTasks.map(t => ({
             title: t.title,
             deadline: t.deadline,
+            deadlineDate: t.deadlineDate,
+            deadlineTime: t.deadlineTime,
+            allDay: t.allDay,
             importance: t.importance,
+            duration: t.duration,
         }));
         
         const response = await makeAIRequest('daily_plan', { tasks: lightweightTasks }, userContext);

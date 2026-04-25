@@ -14,6 +14,7 @@ import {
     BrainCircuit
 } from 'lucide-react';
 import { useTasks } from '../context/TaskContext';
+import { getTaskDeadlineDateString } from '../utils/dateUtils';
 
 const CommandPalette = ({ setActiveTab }) => {
     const {
@@ -26,11 +27,11 @@ const CommandPalette = ({ setActiveTab }) => {
         updateFilter,
         setNewTaskInitialTitle
     } = useTasks();
+
     const [query, setQuery] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef(null);
 
-    // Focus input when opened
     useEffect(() => {
         if (isCommandPaletteOpen) {
             setTimeout(() => inputRef.current?.focus(), 100);
@@ -44,23 +45,19 @@ const CommandPalette = ({ setActiveTab }) => {
         setIsCommandPaletteOpen(false);
     };
 
-    // 1. Task Search (Derived)
     const matchedTasks = useMemo(() => {
         if (!query.trim()) return [];
         return tasks.filter(task =>
             task.title.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 5); // Limit matches
+        ).slice(0, 5);
     }, [query, tasks]);
 
-    // 2. AI Suggestions (Derived Logic)
     const aiSuggestions = useMemo(() => {
-        // Only suggest when context is clear (empty query)
         if (query.trim()) return [];
 
         const suggestions = [];
-
-        // A. Focus Suggestion (Top Ranked Task)
         const topTask = sortedTasks.find(t => t.status === 'pending');
+
         if (topTask) {
             suggestions.push({
                 id: `ai-focus-${topTask.id}`,
@@ -69,17 +66,17 @@ const CommandPalette = ({ setActiveTab }) => {
                 icon: <Sparkles size={18} className="text-purple-400" />,
                 action: () => handleAction(() => {
                     setActiveTab('tasks');
-                    // In a real app, we'd scroll to it.
                 })
             });
         }
 
-        // B. Overdue Review (Contextual)
         const overdueCount = tasks.filter(t => {
-            if (t.status === 'completed' || !t.deadline) return false;
+            const deadlineDate = getTaskDeadlineDateString(t);
+            if (t.status === 'completed' || !deadlineDate) return false;
+
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-            return new Date(t.deadline) < today;
+            return new Date(deadlineDate) < today;
         }).length;
 
         if (overdueCount > 0) {
@@ -96,16 +93,11 @@ const CommandPalette = ({ setActiveTab }) => {
         }
 
         return suggestions;
-    }, [query, sortedTasks, tasks]);
+    }, [query, sortedTasks, tasks, updateFilter, setActiveTab]);
 
-
-    // 3. Conditional Task Creation (Eligibility Rule)
     const canCreateTask = query.trim().length > 2 && matchedTasks.length === 0;
 
-    // 4. Static Commands 
-    // Only show these if they match query OR query is empty
     const staticCommands = [
-        // Navigation
         {
             id: 'nav-dash',
             label: 'Go to Dashboard',
@@ -127,7 +119,6 @@ const CommandPalette = ({ setActiveTab }) => {
             icon: <PieChart size={18} />,
             action: () => handleAction(() => setActiveTab('analytics'))
         },
-        // Settings
         {
             id: 'settings-labs',
             label: 'Productivity Labs',
@@ -135,7 +126,6 @@ const CommandPalette = ({ setActiveTab }) => {
             icon: <Sparkles size={18} className="text-[rgb(var(--color-accent))]" />,
             action: () => handleAction(() => setIsSettingsModalOpen(true))
         },
-        // Explicit Create (Only show if no query, or matches query)
         {
             id: 'act-add',
             label: 'Create New Task',
@@ -153,9 +143,8 @@ const CommandPalette = ({ setActiveTab }) => {
         );
     }, [query]);
 
-    // 5. Assemble Final List
     const flattenedResults = [
-        ...aiSuggestions, // AI First (Top of list)
+        ...aiSuggestions,
         ...matchedTasks.map(t => ({
             id: t.id,
             label: t.title,
@@ -169,7 +158,7 @@ const CommandPalette = ({ setActiveTab }) => {
         ...filteredStaticCommands,
         ...(canCreateTask ? [{
             id: 'create-dynamic',
-            label: query.length > 15 ? `Plan: "${query}"` : `Add task: "${query}"`, // Smart labeling for long inputs
+            label: query.length > 15 ? `Plan: "${query}"` : `Add task: "${query}"`,
             group: 'Actions',
             icon: query.length > 15 ? <BrainCircuit size={18} className="text-purple-600" /> : <Plus size={18} className="text-[rgb(var(--color-accent))]" />,
             isCreate: true,
@@ -180,7 +169,6 @@ const CommandPalette = ({ setActiveTab }) => {
         }] : [])
     ];
 
-    // Keyboard Navigation Logic
     useEffect(() => {
         const handleKeyDown = (e) => {
             if (!isCommandPaletteOpen) return;
@@ -188,14 +176,19 @@ const CommandPalette = ({ setActiveTab }) => {
             if (e.key === 'Escape') {
                 setIsCommandPaletteOpen(false);
             }
+
             if (e.key === 'ArrowDown') {
+                if (!flattenedResults.length) return;
                 e.preventDefault();
                 setSelectedIndex(prev => (prev + 1) % flattenedResults.length);
             }
+
             if (e.key === 'ArrowUp') {
+                if (!flattenedResults.length) return;
                 e.preventDefault();
                 setSelectedIndex(prev => (prev - 1 + flattenedResults.length) % flattenedResults.length);
             }
+
             if (e.key === 'Enter') {
                 e.preventDefault();
                 if (flattenedResults[selectedIndex]) {
@@ -206,9 +199,8 @@ const CommandPalette = ({ setActiveTab }) => {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isCommandPaletteOpen, selectedIndex, flattenedResults]);
+    }, [isCommandPaletteOpen, selectedIndex, flattenedResults, setIsCommandPaletteOpen]);
 
-    // Reset selection when query changes
     useEffect(() => {
         setSelectedIndex(0);
     }, [query]);
@@ -217,7 +209,6 @@ const CommandPalette = ({ setActiveTab }) => {
         <AnimatePresence>
             {isCommandPaletteOpen && (
                 <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4">
-                    {/* Backdrop */}
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -226,15 +217,13 @@ const CommandPalette = ({ setActiveTab }) => {
                         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
                     />
 
-                    {/* Palette */}
                     <motion.div
                         initial={{ y: '100%', opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: '100%', opacity: 0 }}
-                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                         className="relative w-full md:w-[600px] bg-[var(--bg-surface)] md:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden border border-[var(--border-base)] flex flex-col max-h-[80vh]"
                     >
-                        {/* Search Input */}
                         <div className="flex items-center px-4 py-4 border-b border-[var(--border-base)]">
                             <Search className="text-[var(--text-primary)] opacity-50 mr-3" size={20} />
                             <input
@@ -256,7 +245,6 @@ const CommandPalette = ({ setActiveTab }) => {
                             </button>
                         </div>
 
-                        {/* Results */}
                         <div className="overflow-y-auto p-2 min-h-[100px] max-h-[500px]">
                             {flattenedResults.length > 0 ? (
                                 <div className="space-y-1">
@@ -294,11 +282,10 @@ const CommandPalette = ({ setActiveTab }) => {
                             )}
                         </div>
 
-                        {/* Footer (Desktop) */}
                         <div className="hidden md:flex items-center justify-between px-4 py-2 bg-[var(--text-primary)]/5 text-xs text-[var(--text-primary)] opacity-60 border-t border-[var(--border-base)]">
                             <div className="flex items-center space-x-4">
-                                <span><kbd className="bg-[var(--text-primary)]/10 px-1.5 py-0.5 rounded text-[var(--text-primary)] font-sans">↑↓</kbd> to navigate</span>
-                                <span><kbd className="bg-[var(--text-primary)]/10 px-1.5 py-0.5 rounded text-[var(--text-primary)] font-sans">↵</kbd> to select</span>
+                                <span><kbd className="bg-[var(--text-primary)]/10 px-1.5 py-0.5 rounded text-[var(--text-primary)] font-sans">Up/Down</kbd> to navigate</span>
+                                <span><kbd className="bg-[var(--text-primary)]/10 px-1.5 py-0.5 rounded text-[var(--text-primary)] font-sans">Enter</kbd> to select</span>
                             </div>
                             <span>TickTasker Command</span>
                         </div>
